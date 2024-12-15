@@ -1,8 +1,19 @@
 ![mshark_new](https://github.com/user-attachments/assets/ee1b9526-dcae-4ff8-962d-315897e49ed0)
 # mShark - Mini [Wireshark](https://www.wireshark.org/) written in Go
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/shadowy-pycoder/mshark.svg)](https://pkg.go.dev/github.com/shadowy-pycoder/mshark)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/shadowy-pycoder/mshark)
+[![Go Report Card](https://goreportcard.com/badge/github.com/shadowy-pycoder/mshark)](https://goreportcard.com/report/github.com/shadowy-pycoder/mshark)
+![GitHub Release](https://img.shields.io/github/v/release/shadowy-pycoder/mshark)
+![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/shadowy-pycoder/mshark/total)
+
 
 ## Installation
+
+Download release from [Releases](https://github.com/shadowy-pycoder/mshark/releases) Page.
+
+Or install using `go install` (requires Go 1.23+ but may work with older versions):
 
 ```shell
 CGO_ENABLED=0 go install -ldflags "-s -w" -trimpath github.com/shadowy-pycoder/mshark/cmd/mshark@latest
