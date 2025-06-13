@@ -6,7 +6,9 @@ import (
 	"strings"
 )
 
-const headerSizeTLS = 5
+const (
+	headerSizeTLS = 5
+)
 
 type Record struct {
 	ContentType     uint8
@@ -14,7 +16,106 @@ type Record struct {
 	Version         uint16
 	VersionDesc     string
 	Length          uint16
-	data            []byte
+	Data            []byte
+}
+
+type CipherSuite struct {
+	Value uint16
+	Desc  string
+}
+
+type ServerName struct {
+	Type         uint16
+	Length       uint16
+	SNListLength uint16
+	SNType       uint8
+	SNNameLength uint16
+	SNName       []byte
+}
+
+func (sn *ServerName) Parse(data []byte) error {
+	sn.Type = binary.BigEndian.Uint16(data[0:2])
+	sn.Length = binary.BigEndian.Uint16(data[2:4])
+	sn.SNListLength = binary.BigEndian.Uint16(data[4:6])
+	sn.SNType = data[6]
+	sn.SNNameLength = binary.BigEndian.Uint16(data[7:9])
+	sn.SNName = data[9 : 9+sn.SNNameLength]
+	return nil
+}
+
+// https://wiki.osdev.org/TLS_Handshake#Client_Hello_Message
+type TLSClientHello struct {
+	Length             int // 3 bytes int(uint(b[2]) | uint(b[1])<<8 | uint(b[0])<<16))
+	Version            uint16
+	VersionDesc        string
+	Random             []byte //32 bytes
+	SessionIDLength    uint8  // if 0 no session follows
+	SessionID          []byte
+	CipherSuitesLength uint16
+	CipherSuites       []*CipherSuite
+	CmprMethodsLength  uint8  // usually 0x01
+	CmprMethods        []byte // usually 0x00
+	ExtensionLength    uint16
+	ServerName         ServerName
+}
+
+func (tch *TLSClientHello) Parse(data []byte) error {
+	// TODO: add ParseHandshake and type dispatcher
+	// offset 7 bytes
+	tch.Length = int(uint(data[3]) | uint(data[2])<<8 | uint(data[1])<<16) // 6 - 8 bytes data[1:4]
+	tch.Version = binary.BigEndian.Uint16(data[4:6])                       // 9 - 10 bytes data[4:6]
+	tch.VersionDesc = verdesc(tch.Version)
+	tch.Random = data[6:38]                           // 11-42 data[6:38]
+	tch.SessionIDLength = data[38]                    // 43 data[38] 32 bytes
+	sid := tch.SessionIDLength + 39                   // 70
+	tch.SessionID = data[39:sid]                      // data[39:71]
+	csl := binary.BigEndian.Uint16(data[sid : sid+2]) // data[71:73] suites count * 2 bytes
+	tch.CipherSuitesLength = csl
+	cmproffset := csl + 73 // 107
+	css := make([]*CipherSuite, 0, csl/2+1)
+	for i := range len(data[73:cmproffset]) {
+		val := binary.BigEndian.Uint16(data[i : i+2])
+		valdesc := csuitedesc(val)
+		css = append(css, &CipherSuite{Value: val, Desc: valdesc})
+	}
+	tch.CipherSuites = css
+	cml := data[cmproffset] // 107
+	tch.CmprMethodsLength = cml
+	extoffset := cmproffset + 1 + uint16(cml)
+	tch.CmprMethods = data[cmproffset+1 : extoffset]                 // data[108:109]
+	extlen := binary.BigEndian.Uint16(data[extoffset : extoffset+2]) // data[109:111]
+	tch.ExtensionLength = extlen
+	var i = extoffset + 2
+	for i < extoffset+extlen {
+		typ := binary.BigEndian.Uint16(data[i : i+2])
+		length := binary.BigEndian.Uint16(data[i+2 : i+4])
+		switch typ {
+		case 0: // TODO: add more extensions
+			sn := ServerName{}
+			err := sn.Parse(data[i : i+length+4])
+			if err != nil {
+				return err
+			}
+			tch.ServerName = sn
+			i += length + 4
+		default:
+			i += length + 4
+		}
+	}
+	return nil
+}
+
+// https://wiki.osdev.org/TLS_Handshake#Server_Hello_Message
+type TLSServerHello struct {
+	Length          int // 3 bytes int(uint(b[2]) | uint(b[1])<<8 | uint(b[0])<<16))
+	Version         uint16
+	VersionDesc     string
+	Random          []byte //32 bytes
+	SessionIDLength uint8  // if 0 no session follows
+	SessionID       []byte
+	CipherSuite     *CipherSuite
+	CmprMethod      uint8
+	ExtensionLength uint16
 }
 
 func (r *Record) String() string {
@@ -56,7 +157,7 @@ func (t *TLSMessage) Summary() string {
 			}
 			sb.WriteString(fmt.Sprintf("%s (%#04x) ", rec.VersionDesc, rec.Version))
 			if rec.ContentType == 22 {
-				hstd := hstypedesc(rec.data[0])
+				hstd := hstypedesc(rec.Data[0])
 				sb.WriteString(fmt.Sprintf("%s ", hstd))
 			}
 			sb.WriteString(fmt.Sprintf("%s (%d) Len: %d ",
@@ -106,7 +207,7 @@ func (t *TLSMessage) Parse(data []byte) error {
 			Version:         ver,
 			VersionDesc:     verdesc,
 			Length:          rlen,
-			data:            data[headerSizeTLS : headerSizeTLS+rlen],
+			Data:            data[headerSizeTLS : headerSizeTLS+rlen],
 		}
 		t.Records = append(t.Records, r)
 		data = data[headerSizeTLS+rlen:]
@@ -218,4 +319,853 @@ func hstypedesc(hstype uint8) string {
 		hstypedesc = "Unknown"
 	}
 	return hstypedesc
+}
+
+func csuitedesc(csuite uint16) string {
+	var csuitedesc string
+	switch csuite {
+	case 0x0000:
+		csuitedesc = "TLS_NULL_WITH_NULL_NULL"
+	case 0x0001:
+		csuitedesc = "TLS_RSA_WITH_NULL_MD5"
+	case 0x0002:
+		csuitedesc = "TLS_RSA_WITH_NULL_SHA"
+	case 0x0003:
+		csuitedesc = "TLS_RSA_EXPORT_WITH_RC4_40_MD5"
+	case 0x0004:
+		csuitedesc = "TLS_RSA_WITH_RC4_128_MD5"
+	case 0x0005:
+		csuitedesc = "TLS_RSA_WITH_RC4_128_SHA"
+	case 0x0006:
+		csuitedesc = "TLS_RSA_EXPORT_WITH_RC2_CBC_40_MD5"
+	case 0x0007:
+		csuitedesc = "TLS_RSA_WITH_IDEA_CBC_SHA"
+	case 0x0008:
+		csuitedesc = "TLS_RSA_EXPORT_WITH_DES40_CBC_SHA"
+	case 0x0009:
+		csuitedesc = "TLS_RSA_WITH_DES_CBC_SHA"
+	case 0x000A:
+		csuitedesc = "TLS_RSA_WITH_3DES_EDE_CBC_SHA"
+	case 0x000B:
+		csuitedesc = "TLS_DH_DSS_EXPORT_WITH_DES40_CBC_SHA"
+	case 0x000C:
+		csuitedesc = "TLS_DH_DSS_WITH_DES_CBC_SHA"
+	case 0x000D:
+		csuitedesc = "TLS_DH_DSS_WITH_3DES_EDE_CBC_SHA"
+	case 0x000E:
+		csuitedesc = "TLS_DH_RSA_EXPORT_WITH_DES40_CBC_SHA"
+	case 0x000F:
+		csuitedesc = "TLS_DH_RSA_WITH_DES_CBC_SHA"
+	case 0x0010:
+		csuitedesc = "TLS_DH_RSA_WITH_3DES_EDE_CBC_SHA"
+	case 0x0011:
+		csuitedesc = "TLS_DHE_DSS_EXPORT_WITH_DES40_CBC_SHA"
+	case 0x0012:
+		csuitedesc = "TLS_DHE_DSS_WITH_DES_CBC_SHA"
+	case 0x0013:
+		csuitedesc = "TLS_DHE_DSS_WITH_3DES_EDE_CBC_SHA"
+	case 0x0014:
+		csuitedesc = "TLS_DHE_RSA_EXPORT_WITH_DES40_CBC_SHA"
+	case 0x0015:
+		csuitedesc = "TLS_DHE_RSA_WITH_DES_CBC_SHA"
+	case 0x0016:
+		csuitedesc = "TLS_DHE_RSA_WITH_3DES_EDE_CBC_SHA"
+	case 0x0017:
+		csuitedesc = "TLS_DH_anon_EXPORT_WITH_RC4_40_MD5"
+	case 0x0018:
+		csuitedesc = "TLS_DH_anon_WITH_RC4_128_MD5"
+	case 0x0019:
+		csuitedesc = "TLS_DH_anon_EXPORT_WITH_DES40_CBC_SHA"
+	case 0x001A:
+		csuitedesc = "TLS_DH_anon_WITH_DES_CBC_SHA"
+	case 0x001B:
+		csuitedesc = "TLS_DH_anon_WITH_3DES_EDE_CBC_SHA"
+	case 0x001E:
+		csuitedesc = "TLS_KRB5_WITH_DES_CBC_SHA"
+	case 0x001F:
+		csuitedesc = "TLS_KRB5_WITH_3DES_EDE_CBC_SHA"
+	case 0x0020:
+		csuitedesc = "TLS_KRB5_WITH_RC4_128_SHA"
+	case 0x0021:
+		csuitedesc = "TLS_KRB5_WITH_IDEA_CBC_SHA"
+	case 0x0022:
+		csuitedesc = "TLS_KRB5_WITH_DES_CBC_MD5"
+	case 0x0023:
+		csuitedesc = "TLS_KRB5_WITH_3DES_EDE_CBC_MD5"
+	case 0x0024:
+		csuitedesc = "TLS_KRB5_WITH_RC4_128_MD5"
+	case 0x0025:
+		csuitedesc = "TLS_KRB5_WITH_IDEA_CBC_MD5"
+	case 0x0026:
+		csuitedesc = "TLS_KRB5_EXPORT_WITH_DES_CBC_40_SHA"
+	case 0x0027:
+		csuitedesc = "TLS_KRB5_EXPORT_WITH_RC2_CBC_40_SHA"
+	case 0x0028:
+		csuitedesc = "TLS_KRB5_EXPORT_WITH_RC4_40_SHA"
+	case 0x0029:
+		csuitedesc = "TLS_KRB5_EXPORT_WITH_DES_CBC_40_MD5"
+	case 0x002A:
+		csuitedesc = "TLS_KRB5_EXPORT_WITH_RC2_CBC_40_MD5"
+	case 0x002B:
+		csuitedesc = "TLS_KRB5_EXPORT_WITH_RC4_40_MD5"
+	case 0x002C:
+		csuitedesc = "TLS_PSK_WITH_NULL_SHA"
+	case 0x002D:
+		csuitedesc = "TLS_DHE_PSK_WITH_NULL_SHA"
+	case 0x002E:
+		csuitedesc = "TLS_RSA_PSK_WITH_NULL_SHA"
+	case 0x002F:
+		csuitedesc = "TLS_RSA_WITH_AES_128_CBC_SHA"
+	case 0x0030:
+		csuitedesc = "TLS_DH_DSS_WITH_AES_128_CBC_SHA"
+	case 0x0031:
+		csuitedesc = "TLS_DH_RSA_WITH_AES_128_CBC_SHA"
+	case 0x0032:
+		csuitedesc = "TLS_DHE_DSS_WITH_AES_128_CBC_SHA"
+	case 0x0033:
+		csuitedesc = "TLS_DHE_RSA_WITH_AES_128_CBC_SHA"
+	case 0x0034:
+		csuitedesc = "TLS_DH_anon_WITH_AES_128_CBC_SHA"
+	case 0x0035:
+		csuitedesc = "TLS_RSA_WITH_AES_256_CBC_SHA"
+	case 0x0036:
+		csuitedesc = "TLS_DH_DSS_WITH_AES_256_CBC_SHA"
+	case 0x0037:
+		csuitedesc = "TLS_DH_RSA_WITH_AES_256_CBC_SHA"
+	case 0x0038:
+		csuitedesc = "TLS_DHE_DSS_WITH_AES_256_CBC_SHA"
+	case 0x0039:
+		csuitedesc = "TLS_DHE_RSA_WITH_AES_256_CBC_SHA"
+	case 0x003A:
+		csuitedesc = "TLS_DH_anon_WITH_AES_256_CBC_SHA"
+	case 0x003B:
+		csuitedesc = "TLS_RSA_WITH_NULL_SHA256"
+	case 0x003C:
+		csuitedesc = "TLS_RSA_WITH_AES_128_CBC_SHA256"
+	case 0x003D:
+		csuitedesc = "TLS_RSA_WITH_AES_256_CBC_SHA256"
+	case 0x003E:
+		csuitedesc = "TLS_DH_DSS_WITH_AES_128_CBC_SHA256"
+	case 0x003F:
+		csuitedesc = "TLS_DH_RSA_WITH_AES_128_CBC_SHA256"
+	case 0x0040:
+		csuitedesc = "TLS_DHE_DSS_WITH_AES_128_CBC_SHA256"
+	case 0x0041:
+		csuitedesc = "TLS_RSA_WITH_CAMELLIA_128_CBC_SHA"
+	case 0x0042:
+		csuitedesc = "TLS_DH_DSS_WITH_CAMELLIA_128_CBC_SHA"
+	case 0x0043:
+		csuitedesc = "TLS_DH_RSA_WITH_CAMELLIA_128_CBC_SHA"
+	case 0x0044:
+		csuitedesc = "TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA"
+	case 0x0045:
+		csuitedesc = "TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA"
+	case 0x0046:
+		csuitedesc = "TLS_DH_anon_WITH_CAMELLIA_128_CBC_SHA"
+	case 0x0067:
+		csuitedesc = "TLS_DHE_RSA_WITH_AES_128_CBC_SHA256"
+	case 0x0068:
+		csuitedesc = "TLS_DH_DSS_WITH_AES_256_CBC_SHA256"
+	case 0x0069:
+		csuitedesc = "TLS_DH_RSA_WITH_AES_256_CBC_SHA256"
+	case 0x006A:
+		csuitedesc = "TLS_DHE_DSS_WITH_AES_256_CBC_SHA256"
+	case 0x006B:
+		csuitedesc = "TLS_DHE_RSA_WITH_AES_256_CBC_SHA256"
+	case 0x006C:
+		csuitedesc = "TLS_DH_anon_WITH_AES_128_CBC_SHA256"
+	case 0x006D:
+		csuitedesc = "TLS_DH_anon_WITH_AES_256_CBC_SHA256"
+	case 0x0084:
+		csuitedesc = "TLS_RSA_WITH_CAMELLIA_256_CBC_SHA"
+	case 0x0085:
+		csuitedesc = "TLS_DH_DSS_WITH_CAMELLIA_256_CBC_SHA"
+	case 0x0086:
+		csuitedesc = "TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA"
+	case 0x0087:
+		csuitedesc = "TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA"
+	case 0x0088:
+		csuitedesc = "TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA"
+	case 0x0089:
+		csuitedesc = "TLS_DH_anon_WITH_CAMELLIA_256_CBC_SHA"
+	case 0x008A:
+		csuitedesc = "TLS_PSK_WITH_RC4_128_SHA"
+	case 0x008B:
+		csuitedesc = "TLS_PSK_WITH_3DES_EDE_CBC_SHA"
+	case 0x008C:
+		csuitedesc = "TLS_PSK_WITH_AES_128_CBC_SHA"
+	case 0x008D:
+		csuitedesc = "TLS_PSK_WITH_AES_256_CBC_SHA"
+	case 0x008E:
+		csuitedesc = "TLS_DHE_PSK_WITH_RC4_128_SHA"
+	case 0x008F:
+		csuitedesc = "TLS_DHE_PSK_WITH_3DES_EDE_CBC_SHA"
+	case 0x0090:
+		csuitedesc = "TLS_DHE_PSK_WITH_AES_128_CBC_SHA"
+	case 0x0091:
+		csuitedesc = "TLS_DHE_PSK_WITH_AES_256_CBC_SHA"
+	case 0x0092:
+		csuitedesc = "TLS_RSA_PSK_WITH_RC4_128_SHA"
+	case 0x0093:
+		csuitedesc = "TLS_RSA_PSK_WITH_3DES_EDE_CBC_SHA"
+	case 0x0094:
+		csuitedesc = "TLS_RSA_PSK_WITH_AES_128_CBC_SHA"
+	case 0x0095:
+		csuitedesc = "TLS_RSA_PSK_WITH_AES_256_CBC_SHA"
+	case 0x0096:
+		csuitedesc = "TLS_RSA_WITH_SEED_CBC_SHA"
+	case 0x0097:
+		csuitedesc = "TLS_DH_DSS_WITH_SEED_CBC_SHA"
+	case 0x0098:
+		csuitedesc = "TLS_DH_RSA_WITH_SEED_CBC_SHA"
+	case 0x0099:
+		csuitedesc = "TLS_DHE_DSS_WITH_SEED_CBC_SHA"
+	case 0x009A:
+		csuitedesc = "TLS_DHE_RSA_WITH_SEED_CBC_SHA"
+	case 0x009B:
+		csuitedesc = "TLS_DH_anon_WITH_SEED_CBC_SHA"
+	case 0x009C:
+		csuitedesc = "TLS_RSA_WITH_AES_128_GCM_SHA256"
+	case 0x009D:
+		csuitedesc = "TLS_RSA_WITH_AES_256_GCM_SHA384"
+	case 0x009E:
+		csuitedesc = "TLS_DHE_RSA_WITH_AES_128_GCM_SHA256"
+	case 0x009F:
+		csuitedesc = "TLS_DHE_RSA_WITH_AES_256_GCM_SHA384"
+	case 0x00A0:
+		csuitedesc = "TLS_DH_RSA_WITH_AES_128_GCM_SHA256"
+	case 0x00A1:
+		csuitedesc = "TLS_DH_RSA_WITH_AES_256_GCM_SHA384"
+	case 0x00A2:
+		csuitedesc = "TLS_DHE_DSS_WITH_AES_128_GCM_SHA256"
+	case 0x00A3:
+		csuitedesc = "TLS_DHE_DSS_WITH_AES_256_GCM_SHA384"
+	case 0x00A4:
+		csuitedesc = "TLS_DH_DSS_WITH_AES_128_GCM_SHA256"
+	case 0x00A5:
+		csuitedesc = "TLS_DH_DSS_WITH_AES_256_GCM_SHA384"
+	case 0x00A6:
+		csuitedesc = "TLS_DH_anon_WITH_AES_128_GCM_SHA256"
+	case 0x00A7:
+		csuitedesc = "TLS_DH_anon_WITH_AES_256_GCM_SHA384"
+	case 0x00A8:
+		csuitedesc = "TLS_PSK_WITH_AES_128_GCM_SHA256"
+	case 0x00A9:
+		csuitedesc = "TLS_PSK_WITH_AES_256_GCM_SHA384"
+	case 0x00AA:
+		csuitedesc = "TLS_DHE_PSK_WITH_AES_128_GCM_SHA256"
+	case 0x00AB:
+		csuitedesc = "TLS_DHE_PSK_WITH_AES_256_GCM_SHA384"
+	case 0x00AC:
+		csuitedesc = "TLS_RSA_PSK_WITH_AES_128_GCM_SHA256"
+	case 0x00AD:
+		csuitedesc = "TLS_RSA_PSK_WITH_AES_256_GCM_SHA384"
+	case 0x00AE:
+		csuitedesc = "TLS_PSK_WITH_AES_128_CBC_SHA256"
+	case 0x00AF:
+		csuitedesc = "TLS_PSK_WITH_AES_256_CBC_SHA384"
+	case 0x00B0:
+		csuitedesc = "TLS_PSK_WITH_NULL_SHA256"
+	case 0x00B1:
+		csuitedesc = "TLS_PSK_WITH_NULL_SHA384"
+	case 0x00B2:
+		csuitedesc = "TLS_DHE_PSK_WITH_AES_128_CBC_SHA256"
+	case 0x00B3:
+		csuitedesc = "TLS_DHE_PSK_WITH_AES_256_CBC_SHA384"
+	case 0x00B4:
+		csuitedesc = "TLS_DHE_PSK_WITH_NULL_SHA256"
+	case 0x00B5:
+		csuitedesc = "TLS_DHE_PSK_WITH_NULL_SHA384"
+	case 0x00B6:
+		csuitedesc = "TLS_RSA_PSK_WITH_AES_128_CBC_SHA256"
+	case 0x00B7:
+		csuitedesc = "TLS_RSA_PSK_WITH_AES_256_CBC_SHA384"
+	case 0x00B8:
+		csuitedesc = "TLS_RSA_PSK_WITH_NULL_SHA256"
+	case 0x00B9:
+		csuitedesc = "TLS_RSA_PSK_WITH_NULL_SHA384"
+	case 0x00BA:
+		csuitedesc = "TLS_RSA_WITH_CAMELLIA_128_CBC_SHA256"
+	case 0x00BB:
+		csuitedesc = "TLS_DH_DSS_WITH_CAMELLIA_128_CBC_SHA256"
+	case 0x00BC:
+		csuitedesc = "TLS_DH_RSA_WITH_CAMELLIA_128_CBC_SHA256"
+	case 0x00BD:
+		csuitedesc = "TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA256"
+	case 0x00BE:
+		csuitedesc = "TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA256"
+	case 0x00BF:
+		csuitedesc = "TLS_DH_anon_WITH_CAMELLIA_128_CBC_SHA256"
+	case 0x00C0:
+		csuitedesc = "TLS_RSA_WITH_CAMELLIA_256_CBC_SHA256"
+	case 0x00C1:
+		csuitedesc = "TLS_DH_DSS_WITH_CAMELLIA_256_CBC_SHA256"
+	case 0x00C2:
+		csuitedesc = "TLS_DH_RSA_WITH_CAMELLIA_256_CBC_SHA256"
+	case 0x00C3:
+		csuitedesc = "TLS_DHE_DSS_WITH_CAMELLIA_256_CBC_SHA256"
+	case 0x00C4:
+		csuitedesc = "TLS_DHE_RSA_WITH_CAMELLIA_256_CBC_SHA256"
+	case 0x00C5:
+		csuitedesc = "TLS_DH_anon_WITH_CAMELLIA_256_CBC_SHA256"
+	case 0x00C6:
+		csuitedesc = "TLS_SM4_GCM_SM3"
+	case 0x00C7:
+		csuitedesc = "TLS_SM4_CCM_SM3"
+	case 0x00FF:
+		csuitedesc = "TLS_EMPTY_RENEGOTIATION_INFO_SCSV"
+	case 0x1301:
+		csuitedesc = "TLS_AES_128_GCM_SHA256"
+	case 0x1302:
+		csuitedesc = "TLS_AES_256_GCM_SHA384"
+	case 0x1303:
+		csuitedesc = "TLS_CHACHA20_POLY1305_SHA256"
+	case 0x1304:
+		csuitedesc = "TLS_AES_128_CCM_SHA256"
+	case 0x1305:
+		csuitedesc = "TLS_AES_128_CCM_8_SHA256"
+	case 0x1306:
+		csuitedesc = "TLS_AEGIS_256_SHA512"
+	case 0x1307:
+		csuitedesc = "TLS_AEGIS_128L_SHA256"
+	case 0x5600:
+		csuitedesc = "TLS_FALLBACK_SCSV"
+	case 0xC001:
+		csuitedesc = "TLS_ECDH_ECDSA_WITH_NULL_SHA"
+	case 0xC002:
+		csuitedesc = "TLS_ECDH_ECDSA_WITH_RC4_128_SHA"
+	case 0xC003:
+		csuitedesc = "TLS_ECDH_ECDSA_WITH_3DES_EDE_CBC_SHA"
+	case 0xC004:
+		csuitedesc = "TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA"
+	case 0xC005:
+		csuitedesc = "TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA"
+	case 0xC006:
+		csuitedesc = "TLS_ECDHE_ECDSA_WITH_NULL_SHA"
+	case 0xC007:
+		csuitedesc = "TLS_ECDHE_ECDSA_WITH_RC4_128_SHA"
+	case 0xC008:
+		csuitedesc = "TLS_ECDHE_ECDSA_WITH_3DES_EDE_CBC_SHA"
+	case 0xC009:
+		csuitedesc = "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA"
+	case 0xC00A:
+		csuitedesc = "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA"
+	case 0xC00B:
+		csuitedesc = "TLS_ECDH_RSA_WITH_NULL_SHA"
+	case 0xC00C:
+		csuitedesc = "TLS_ECDH_RSA_WITH_RC4_128_SHA"
+	case 0xC00D:
+		csuitedesc = "TLS_ECDH_RSA_WITH_3DES_EDE_CBC_SHA"
+	case 0xC00E:
+		csuitedesc = "TLS_ECDH_RSA_WITH_AES_128_CBC_SHA"
+	case 0xC00F:
+		csuitedesc = "TLS_ECDH_RSA_WITH_AES_256_CBC_SHA"
+	case 0xC010:
+		csuitedesc = "TLS_ECDHE_RSA_WITH_NULL_SHA"
+	case 0xC011:
+		csuitedesc = "TLS_ECDHE_RSA_WITH_RC4_128_SHA"
+	case 0xC012:
+		csuitedesc = "TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA"
+	case 0xC013:
+		csuitedesc = "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA"
+	case 0xC014:
+		csuitedesc = "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA"
+	case 0xC015:
+		csuitedesc = "TLS_ECDH_anon_WITH_NULL_SHA"
+	case 0xC016:
+		csuitedesc = "TLS_ECDH_anon_WITH_RC4_128_SHA"
+	case 0xC017:
+		csuitedesc = "TLS_ECDH_anon_WITH_3DES_EDE_CBC_SHA"
+	case 0xC018:
+		csuitedesc = "TLS_ECDH_anon_WITH_AES_128_CBC_SHA"
+	case 0xC019:
+		csuitedesc = "TLS_ECDH_anon_WITH_AES_256_CBC_SHA"
+	case 0xC01A:
+		csuitedesc = "TLS_SRP_SHA_WITH_3DES_EDE_CBC_SHA"
+	case 0xC01B:
+		csuitedesc = "TLS_SRP_SHA_RSA_WITH_3DES_EDE_CBC_SHA"
+	case 0xC01C:
+		csuitedesc = "TLS_SRP_SHA_DSS_WITH_3DES_EDE_CBC_SHA"
+	case 0xC01D:
+		csuitedesc = "TLS_SRP_SHA_WITH_AES_128_CBC_SHA"
+	case 0xC01E:
+		csuitedesc = "TLS_SRP_SHA_RSA_WITH_AES_128_CBC_SHA"
+	case 0xC01F:
+		csuitedesc = "TLS_SRP_SHA_DSS_WITH_AES_128_CBC_SHA"
+	case 0xC020:
+		csuitedesc = "TLS_SRP_SHA_WITH_AES_256_CBC_SHA"
+	case 0xC021:
+		csuitedesc = "TLS_SRP_SHA_RSA_WITH_AES_256_CBC_SHA"
+	case 0xC022:
+		csuitedesc = "TLS_SRP_SHA_DSS_WITH_AES_256_CBC_SHA"
+	case 0xC023:
+		csuitedesc = "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256"
+	case 0xC024:
+		csuitedesc = "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384"
+	case 0xC025:
+		csuitedesc = "TLS_ECDH_ECDSA_WITH_AES_128_CBC_SHA256"
+	case 0xC026:
+		csuitedesc = "TLS_ECDH_ECDSA_WITH_AES_256_CBC_SHA384"
+	case 0xC027:
+		csuitedesc = "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256"
+	case 0xC028:
+		csuitedesc = "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384"
+	case 0xC029:
+		csuitedesc = "TLS_ECDH_RSA_WITH_AES_128_CBC_SHA256"
+	case 0xC02A:
+		csuitedesc = "TLS_ECDH_RSA_WITH_AES_256_CBC_SHA384"
+	case 0xC02B:
+		csuitedesc = "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"
+	case 0xC02C:
+		csuitedesc = "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384"
+	case 0xC02D:
+		csuitedesc = "TLS_ECDH_ECDSA_WITH_AES_128_GCM_SHA256"
+	case 0xC02E:
+		csuitedesc = "TLS_ECDH_ECDSA_WITH_AES_256_GCM_SHA384"
+	case 0xC02F:
+		csuitedesc = "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"
+	case 0xC030:
+		csuitedesc = "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
+	case 0xC031:
+		csuitedesc = "TLS_ECDH_RSA_WITH_AES_128_GCM_SHA256"
+	case 0xC032:
+		csuitedesc = "TLS_ECDH_RSA_WITH_AES_256_GCM_SHA384"
+	case 0xC033:
+		csuitedesc = "TLS_ECDHE_PSK_WITH_RC4_128_SHA"
+	case 0xC034:
+		csuitedesc = "TLS_ECDHE_PSK_WITH_3DES_EDE_CBC_SHA"
+	case 0xC035:
+		csuitedesc = "TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA"
+	case 0xC036:
+		csuitedesc = "TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA"
+	case 0xC037:
+		csuitedesc = "TLS_ECDHE_PSK_WITH_AES_128_CBC_SHA256"
+	case 0xC038:
+		csuitedesc = "TLS_ECDHE_PSK_WITH_AES_256_CBC_SHA384"
+	case 0xC039:
+		csuitedesc = "TLS_ECDHE_PSK_WITH_NULL_SHA"
+	case 0xC03A:
+		csuitedesc = "TLS_ECDHE_PSK_WITH_NULL_SHA256"
+	case 0xC03B:
+		csuitedesc = "TLS_ECDHE_PSK_WITH_NULL_SHA384"
+	case 0xC03C:
+		csuitedesc = "TLS_RSA_WITH_ARIA_128_CBC_SHA256"
+	case 0xC03D:
+		csuitedesc = "TLS_RSA_WITH_ARIA_256_CBC_SHA384"
+	case 0xC03E:
+		csuitedesc = "TLS_DH_DSS_WITH_ARIA_128_CBC_SHA256"
+	case 0xC03F:
+		csuitedesc = "TLS_DH_DSS_WITH_ARIA_256_CBC_SHA384"
+	case 0xC040:
+		csuitedesc = "TLS_DH_RSA_WITH_ARIA_128_CBC_SHA256"
+	case 0xC041:
+		csuitedesc = "TLS_DH_RSA_WITH_ARIA_256_CBC_SHA384"
+	case 0xC042:
+		csuitedesc = "TLS_DHE_DSS_WITH_ARIA_128_CBC_SHA256"
+	case 0xC043:
+		csuitedesc = "TLS_DHE_DSS_WITH_ARIA_256_CBC_SHA384"
+	case 0xC044:
+		csuitedesc = "TLS_DHE_RSA_WITH_ARIA_128_CBC_SHA256"
+	case 0xC045:
+		csuitedesc = "TLS_DHE_RSA_WITH_ARIA_256_CBC_SHA384"
+	case 0xC046:
+		csuitedesc = "TLS_DH_anon_WITH_ARIA_128_CBC_SHA256"
+	case 0xC047:
+		csuitedesc = "TLS_DH_anon_WITH_ARIA_256_CBC_SHA384"
+	case 0xC048:
+		csuitedesc = "TLS_ECDHE_ECDSA_WITH_ARIA_128_CBC_SHA256"
+	case 0xC049:
+		csuitedesc = "TLS_ECDHE_ECDSA_WITH_ARIA_256_CBC_SHA384"
+	case 0xC04A:
+		csuitedesc = "TLS_ECDH_ECDSA_WITH_ARIA_128_CBC_SHA256"
+	case 0xC04B:
+		csuitedesc = "TLS_ECDH_ECDSA_WITH_ARIA_256_CBC_SHA384"
+	case 0xC04C:
+		csuitedesc = "TLS_ECDHE_RSA_WITH_ARIA_128_CBC_SHA256"
+	case 0xC04D:
+		csuitedesc = "TLS_ECDHE_RSA_WITH_ARIA_256_CBC_SHA384"
+	case 0xC04E:
+		csuitedesc = "TLS_ECDH_RSA_WITH_ARIA_128_CBC_SHA256"
+	case 0xC04F:
+		csuitedesc = "TLS_ECDH_RSA_WITH_ARIA_256_CBC_SHA384"
+	case 0xC050:
+		csuitedesc = "TLS_RSA_WITH_ARIA_128_GCM_SHA256"
+	case 0xC051:
+		csuitedesc = "TLS_RSA_WITH_ARIA_256_GCM_SHA384"
+	case 0xC052:
+		csuitedesc = "TLS_DHE_RSA_WITH_ARIA_128_GCM_SHA256"
+	case 0xC053:
+		csuitedesc = "TLS_DHE_RSA_WITH_ARIA_256_GCM_SHA384"
+	case 0xC054:
+		csuitedesc = "TLS_DH_RSA_WITH_ARIA_128_GCM_SHA256"
+	case 0xC055:
+		csuitedesc = "TLS_DH_RSA_WITH_ARIA_256_GCM_SHA384"
+	case 0xC056:
+		csuitedesc = "TLS_DHE_DSS_WITH_ARIA_128_GCM_SHA256"
+	case 0xC057:
+		csuitedesc = "TLS_DHE_DSS_WITH_ARIA_256_GCM_SHA384"
+	case 0xC058:
+		csuitedesc = "TLS_DH_DSS_WITH_ARIA_128_GCM_SHA256"
+	case 0xC059:
+		csuitedesc = "TLS_DH_DSS_WITH_ARIA_256_GCM_SHA384"
+	case 0xC05A:
+		csuitedesc = "TLS_DH_anon_WITH_ARIA_128_GCM_SHA256"
+	case 0xC05B:
+		csuitedesc = "TLS_DH_anon_WITH_ARIA_256_GCM_SHA384"
+	case 0xC05C:
+		csuitedesc = "TLS_ECDHE_ECDSA_WITH_ARIA_128_GCM_SHA256"
+	case 0xC05D:
+		csuitedesc = "TLS_ECDHE_ECDSA_WITH_ARIA_256_GCM_SHA384"
+	case 0xC05E:
+		csuitedesc = "TLS_ECDH_ECDSA_WITH_ARIA_128_GCM_SHA256"
+	case 0xC05F:
+		csuitedesc = "TLS_ECDH_ECDSA_WITH_ARIA_256_GCM_SHA384"
+	case 0xC060:
+		csuitedesc = "TLS_ECDHE_RSA_WITH_ARIA_128_GCM_SHA256"
+	case 0xC061:
+		csuitedesc = "TLS_ECDHE_RSA_WITH_ARIA_256_GCM_SHA384"
+	case 0xC062:
+		csuitedesc = "TLS_ECDH_RSA_WITH_ARIA_128_GCM_SHA256"
+	case 0xC063:
+		csuitedesc = "TLS_ECDH_RSA_WITH_ARIA_256_GCM_SHA384"
+	case 0xC064:
+		csuitedesc = "TLS_PSK_WITH_ARIA_128_CBC_SHA256"
+	case 0xC065:
+		csuitedesc = "TLS_PSK_WITH_ARIA_256_CBC_SHA384"
+	case 0xC066:
+		csuitedesc = "TLS_DHE_PSK_WITH_ARIA_128_CBC_SHA256"
+	case 0xC067:
+		csuitedesc = "TLS_DHE_PSK_WITH_ARIA_256_CBC_SHA384"
+	case 0xC068:
+		csuitedesc = "TLS_RSA_PSK_WITH_ARIA_128_CBC_SHA256"
+	case 0xC069:
+		csuitedesc = "TLS_RSA_PSK_WITH_ARIA_256_CBC_SHA384"
+	case 0xC06A:
+		csuitedesc = "TLS_PSK_WITH_ARIA_128_GCM_SHA256"
+	case 0xC06B:
+		csuitedesc = "TLS_PSK_WITH_ARIA_256_GCM_SHA384"
+	case 0xC06C:
+		csuitedesc = "TLS_DHE_PSK_WITH_ARIA_128_GCM_SHA256"
+	case 0xC06D:
+		csuitedesc = "TLS_DHE_PSK_WITH_ARIA_256_GCM_SHA384"
+	case 0xC06E:
+		csuitedesc = "TLS_RSA_PSK_WITH_ARIA_128_GCM_SHA256"
+	case 0xC06F:
+		csuitedesc = "TLS_RSA_PSK_WITH_ARIA_256_GCM_SHA384"
+	case 0xC070:
+		csuitedesc = "TLS_ECDHE_PSK_WITH_ARIA_128_CBC_SHA256"
+	case 0xC071:
+		csuitedesc = "TLS_ECDHE_PSK_WITH_ARIA_256_CBC_SHA384"
+	case 0xC072:
+		csuitedesc = "TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_CBC_SHA256"
+	case 0xC073:
+		csuitedesc = "TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_CBC_SHA384"
+	case 0xC074:
+		csuitedesc = "TLS_ECDH_ECDSA_WITH_CAMELLIA_128_CBC_SHA256"
+	case 0xC075:
+		csuitedesc = "TLS_ECDH_ECDSA_WITH_CAMELLIA_256_CBC_SHA384"
+	case 0xC076:
+		csuitedesc = "TLS_ECDHE_RSA_WITH_CAMELLIA_128_CBC_SHA256"
+	case 0xC077:
+		csuitedesc = "TLS_ECDHE_RSA_WITH_CAMELLIA_256_CBC_SHA384"
+	case 0xC078:
+		csuitedesc = "TLS_ECDH_RSA_WITH_CAMELLIA_128_CBC_SHA256"
+	case 0xC079:
+		csuitedesc = "TLS_ECDH_RSA_WITH_CAMELLIA_256_CBC_SHA384"
+	case 0xC07A:
+		csuitedesc = "TLS_RSA_WITH_CAMELLIA_128_GCM_SHA256"
+	case 0xC07B:
+		csuitedesc = "TLS_RSA_WITH_CAMELLIA_256_GCM_SHA384"
+	case 0xC07C:
+		csuitedesc = "TLS_DHE_RSA_WITH_CAMELLIA_128_GCM_SHA256"
+	case 0xC07D:
+		csuitedesc = "TLS_DHE_RSA_WITH_CAMELLIA_256_GCM_SHA384"
+	case 0xC07E:
+		csuitedesc = "TLS_DH_RSA_WITH_CAMELLIA_128_GCM_SHA256"
+	case 0xC07F:
+		csuitedesc = "TLS_DH_RSA_WITH_CAMELLIA_256_GCM_SHA384"
+	case 0xC080:
+		csuitedesc = "TLS_DHE_DSS_WITH_CAMELLIA_128_GCM_SHA256"
+	case 0xC081:
+		csuitedesc = "TLS_DHE_DSS_WITH_CAMELLIA_256_GCM_SHA384"
+	case 0xC082:
+		csuitedesc = "TLS_DH_DSS_WITH_CAMELLIA_128_GCM_SHA256"
+	case 0xC083:
+		csuitedesc = "TLS_DH_DSS_WITH_CAMELLIA_256_GCM_SHA384"
+	case 0xC084:
+		csuitedesc = "TLS_DH_anon_WITH_CAMELLIA_128_GCM_SHA256"
+	case 0xC085:
+		csuitedesc = "TLS_DH_anon_WITH_CAMELLIA_256_GCM_SHA384"
+	case 0xC086:
+		csuitedesc = "TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_GCM_SHA256"
+	case 0xC087:
+		csuitedesc = "TLS_ECDHE_ECDSA_WITH_CAMELLIA_256_GCM_SHA384"
+	case 0xC088:
+		csuitedesc = "TLS_ECDH_ECDSA_WITH_CAMELLIA_128_GCM_SHA256"
+	case 0xC089:
+		csuitedesc = "TLS_ECDH_ECDSA_WITH_CAMELLIA_256_GCM_SHA384"
+	case 0xC08A:
+		csuitedesc = "TLS_ECDHE_RSA_WITH_CAMELLIA_128_GCM_SHA256"
+	case 0xC08B:
+		csuitedesc = "TLS_ECDHE_RSA_WITH_CAMELLIA_256_GCM_SHA384"
+	case 0xC08C:
+		csuitedesc = "TLS_ECDH_RSA_WITH_CAMELLIA_128_GCM_SHA256"
+	case 0xC08D:
+		csuitedesc = "TLS_ECDH_RSA_WITH_CAMELLIA_256_GCM_SHA384"
+	case 0xC08E:
+		csuitedesc = "TLS_PSK_WITH_CAMELLIA_128_GCM_SHA256"
+	case 0xC08F:
+		csuitedesc = "TLS_PSK_WITH_CAMELLIA_256_GCM_SHA384"
+	case 0xC090:
+		csuitedesc = "TLS_DHE_PSK_WITH_CAMELLIA_128_GCM_SHA256"
+	case 0xC091:
+		csuitedesc = "TLS_DHE_PSK_WITH_CAMELLIA_256_GCM_SHA384"
+	case 0xC092:
+		csuitedesc = "TLS_RSA_PSK_WITH_CAMELLIA_128_GCM_SHA256"
+	case 0xC093:
+		csuitedesc = "TLS_RSA_PSK_WITH_CAMELLIA_256_GCM_SHA384"
+	case 0xC094:
+		csuitedesc = "TLS_PSK_WITH_CAMELLIA_128_CBC_SHA256"
+	case 0xC095:
+		csuitedesc = "TLS_PSK_WITH_CAMELLIA_256_CBC_SHA384"
+	case 0xC096:
+		csuitedesc = "TLS_DHE_PSK_WITH_CAMELLIA_128_CBC_SHA256"
+	case 0xC097:
+		csuitedesc = "TLS_DHE_PSK_WITH_CAMELLIA_256_CBC_SHA384"
+	case 0xC098:
+		csuitedesc = "TLS_RSA_PSK_WITH_CAMELLIA_128_CBC_SHA256"
+	case 0xC099:
+		csuitedesc = "TLS_RSA_PSK_WITH_CAMELLIA_256_CBC_SHA384"
+	case 0xC09A:
+		csuitedesc = "TLS_ECDHE_PSK_WITH_CAMELLIA_128_CBC_SHA256"
+	case 0xC09B:
+		csuitedesc = "TLS_ECDHE_PSK_WITH_CAMELLIA_256_CBC_SHA384"
+	case 0xC09C:
+		csuitedesc = "TLS_RSA_WITH_AES_128_CCM"
+	case 0xC09D:
+		csuitedesc = "TLS_RSA_WITH_AES_256_CCM"
+	case 0xC09E:
+		csuitedesc = "TLS_DHE_RSA_WITH_AES_128_CCM"
+	case 0xC09F:
+		csuitedesc = "TLS_DHE_RSA_WITH_AES_256_CCM"
+	case 0xC0A0:
+		csuitedesc = "TLS_RSA_WITH_AES_128_CCM_8"
+	case 0xC0A1:
+		csuitedesc = "TLS_RSA_WITH_AES_256_CCM_8"
+	case 0xC0A2:
+		csuitedesc = "TLS_DHE_RSA_WITH_AES_128_CCM_8"
+	case 0xC0A3:
+		csuitedesc = "TLS_DHE_RSA_WITH_AES_256_CCM_8"
+	case 0xC0A4:
+		csuitedesc = "TLS_PSK_WITH_AES_128_CCM"
+	case 0xC0A5:
+		csuitedesc = "TLS_PSK_WITH_AES_256_CCM"
+	case 0xC0A6:
+		csuitedesc = "TLS_DHE_PSK_WITH_AES_128_CCM"
+	case 0xC0A7:
+		csuitedesc = "TLS_DHE_PSK_WITH_AES_256_CCM"
+	case 0xC0A8:
+		csuitedesc = "TLS_PSK_WITH_AES_128_CCM_8"
+	case 0xC0A9:
+		csuitedesc = "TLS_PSK_WITH_AES_256_CCM_8"
+	case 0xC0AA:
+		csuitedesc = "TLS_PSK_DHE_WITH_AES_128_CCM_8"
+	case 0xC0AB:
+		csuitedesc = "TLS_PSK_DHE_WITH_AES_256_CCM_8"
+	case 0xC0AC:
+		csuitedesc = "TLS_ECDHE_ECDSA_WITH_AES_128_CCM"
+	case 0xC0AD:
+		csuitedesc = "TLS_ECDHE_ECDSA_WITH_AES_256_CCM"
+	case 0xC0AE:
+		csuitedesc = "TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8"
+	case 0xC0AF:
+		csuitedesc = "TLS_ECDHE_ECDSA_WITH_AES_256_CCM_8"
+	case 0xC0B0:
+		csuitedesc = "TLS_ECCPWD_WITH_AES_128_GCM_SHA256"
+	case 0xC0B1:
+		csuitedesc = "TLS_ECCPWD_WITH_AES_256_GCM_SHA384"
+	case 0xC0B2:
+		csuitedesc = "TLS_ECCPWD_WITH_AES_128_CCM_SHA256"
+	case 0xC0B3:
+		csuitedesc = "TLS_ECCPWD_WITH_AES_256_CCM_SHA384"
+	case 0xC0B4:
+		csuitedesc = "TLS_SHA256_SHA256"
+	case 0xC0B5:
+		csuitedesc = "TLS_SHA384_SHA384"
+	case 0xC100:
+		csuitedesc = "TLS_GOSTR341112_256_WITH_KUZNYECHIK_CTR_OMAC"
+	case 0xC101:
+		csuitedesc = "TLS_GOSTR341112_256_WITH_MAGMA_CTR_OMAC"
+	case 0xC102:
+		csuitedesc = "TLS_GOSTR341112_256_WITH_28147_CNT_IMIT"
+	case 0xC103:
+		csuitedesc = "TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L"
+	case 0xC104:
+		csuitedesc = "TLS_GOSTR341112_256_WITH_MAGMA_MGM_L"
+	case 0xC105:
+		csuitedesc = "TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S"
+	case 0xC106:
+		csuitedesc = "TLS_GOSTR341112_256_WITH_MAGMA_MGM_S"
+	case 0xCCA8:
+		csuitedesc = "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256"
+	case 0xCCA9:
+		csuitedesc = "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256"
+	case 0xCCAA:
+		csuitedesc = "TLS_DHE_RSA_WITH_CHACHA20_POLY1305_SHA256"
+	case 0xCCAB:
+		csuitedesc = "TLS_PSK_WITH_CHACHA20_POLY1305_SHA256"
+	case 0xCCAC:
+		csuitedesc = "TLS_ECDHE_PSK_WITH_CHACHA20_POLY1305_SHA256"
+	case 0xCCAD:
+		csuitedesc = "TLS_DHE_PSK_WITH_CHACHA20_POLY1305_SHA256"
+	case 0xCCAE:
+		csuitedesc = "TLS_RSA_PSK_WITH_CHACHA20_POLY1305_SHA256"
+	case 0xD001:
+		csuitedesc = "TLS_ECDHE_PSK_WITH_AES_128_GCM_SHA256"
+	case 0xD002:
+		csuitedesc = "TLS_ECDHE_PSK_WITH_AES_256_GCM_SHA384"
+	case 0xD003:
+		csuitedesc = "TLS_ECDHE_PSK_WITH_AES_128_CCM_8_SHA256"
+	case 0xD005:
+		csuitedesc = "TLS_ECDHE_PSK_WITH_AES_128_CCM_SHA256"
+	default:
+		csuitedesc = "Unknown"
+	}
+	return csuitedesc
+}
+func extdesc(ext uint16) string {
+	var extdesc string
+	switch ext {
+	case 0:
+		extdesc = "server_name"
+	case 1:
+		extdesc = "max_fragment_length"
+	case 2:
+		extdesc = "client_certificate_url"
+	case 3:
+		extdesc = "trusted_ca_keys"
+	case 4:
+		extdesc = "truncated_hmac"
+	case 5:
+		extdesc = "status_request"
+	case 6:
+		extdesc = "user_mapping"
+	case 7:
+		extdesc = "client_authz"
+	case 8:
+		extdesc = "server_authz"
+	case 9:
+		extdesc = "cert_type"
+	case 10:
+		extdesc = "supported_groups"
+	case 11:
+		extdesc = "ec_point_formats"
+	case 12:
+		extdesc = "srp"
+	case 13:
+		extdesc = "signature_algorithms"
+	case 14:
+		extdesc = "use_srtp"
+	case 15:
+		extdesc = "heartbeat"
+	case 16:
+		extdesc = "application_layer_protocol_negotiation"
+	case 17:
+		extdesc = "status_request_v2"
+	case 18:
+		extdesc = "signed_certificate_timestamp"
+	case 19:
+		extdesc = "client_certificate_type"
+	case 20:
+		extdesc = "server_certificate_type"
+	case 21:
+		extdesc = "padding"
+	case 22:
+		extdesc = "encrypt_then_mac"
+	case 23:
+		extdesc = "extended_master_secret"
+	case 24:
+		extdesc = "token_binding"
+	case 25:
+		extdesc = "cached_info"
+	case 26:
+		extdesc = "tls_lts"
+	case 27:
+		extdesc = "compress_certificate"
+	case 28:
+		extdesc = "record_size_limit"
+	case 29:
+		extdesc = "pwd_protect"
+	case 30:
+		extdesc = "pwd_clear"
+	case 31:
+		extdesc = "password_salt"
+	case 32:
+		extdesc = "ticket_pinning"
+	case 33:
+		extdesc = "tls_cert_with_extern_psk"
+	case 34:
+		extdesc = "delegated_credential"
+	case 35:
+		extdesc = "session_ticket"
+	case 36:
+		extdesc = "TLMSP"
+	case 37:
+		extdesc = "TLMSP_proxying"
+	case 38:
+		extdesc = "TLMSP_delegate"
+	case 39:
+		extdesc = "supported_ekt_ciphers"
+	case 41:
+		extdesc = "pre_shared_key"
+	case 42:
+		extdesc = "early_data"
+	case 43:
+		extdesc = "supported_versions"
+	case 44:
+		extdesc = "cookie"
+	case 45:
+		extdesc = "psk_key_exchange_modes"
+	case 47:
+		extdesc = "certificate_authorities"
+	case 48:
+		extdesc = "oid_filters"
+	case 49:
+		extdesc = "post_handshake_auth"
+	case 50:
+		extdesc = "signature_algorithms_cert"
+	case 51:
+		extdesc = "key_share"
+	case 52:
+		extdesc = "transparency_info"
+	case 53:
+		extdesc = "connection_id (deprecated)"
+	case 54:
+		extdesc = "connection_id"
+	case 55:
+		extdesc = "external_id_hash"
+	case 56:
+		extdesc = "external_session_id"
+	case 57:
+		extdesc = "quic_transport_parameters"
+	case 58:
+		extdesc = "ticket_request"
+	case 59:
+		extdesc = "dnssec_chain"
+	case 60:
+		extdesc = "sequence_number_encryption_algorithms"
+	case 61:
+		extdesc = "rrc"
+	case 62:
+		extdesc = "tls_flags"
+	case 64768:
+		extdesc = "ech_outer_extensions"
+	case 65037:
+		extdesc = "encrypted_client_hello"
+	case 65281:
+		extdesc = "renegotiation_info"
+	default:
+		extdesc = "Unknown"
+	}
+	return extdesc
 }
