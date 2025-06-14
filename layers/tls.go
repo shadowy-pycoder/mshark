@@ -7,7 +7,9 @@ import (
 )
 
 const (
-	headerSizeTLS = 5
+	headerSizeTLS     = 5
+	HandshakeTLSVal   = 0x16 // 22
+	ClientHelloTLSVal = 0x01
 )
 
 type Record struct {
@@ -19,9 +21,36 @@ type Record struct {
 	Data            []byte
 }
 
+func (r *Record) String() string {
+	return fmt.Sprintf(` - Content Type: %s (%d)
+ - Version: %s (%#04x)
+ - Length: %d`,
+		r.ContentTypeDesc,
+		r.ContentType,
+		r.VersionDesc,
+		r.Version,
+		r.Length)
+}
+
+type HSTLSParser interface {
+	ParseHS(data []byte) error
+}
+
+func HSTLSParserByType(hstype uint8) HSTLSParser {
+	switch hstype {
+	case 1:
+		return &TLSClientHello{}
+	}
+	return nil
+}
+
 type CipherSuite struct {
 	Value uint16
 	Desc  string
+}
+
+func (cs *CipherSuite) String() string {
+	return fmt.Sprintf("%s (%#x)", cs.Desc, cs.Value)
 }
 
 type ServerName struct {
@@ -56,14 +85,19 @@ type TLSClientHello struct {
 	CmprMethodsLength  uint8  // usually 0x01
 	CmprMethods        []byte // usually 0x00
 	ExtensionLength    uint16
-	ServerName         ServerName
+	ServerName         *ServerName
 }
 
-func (tch *TLSClientHello) Parse(data []byte) error {
-	// TODO: add ParseHandshake and type dispatcher
+func (tch *TLSClientHello) ParseHS(data []byte) error {
 	// offset 7 bytes
+	if len(data) < 4 {
+		return fmt.Errorf("message should be at least 4 bytes, got %d bytes", len(data))
+	}
 	tch.Length = int(uint(data[3]) | uint(data[2])<<8 | uint(data[1])<<16) // 6 - 8 bytes data[1:4]
-	tch.Version = binary.BigEndian.Uint16(data[4:6])                       // 9 - 10 bytes data[4:6]
+	if len(data)-4 < tch.Length {
+		return fmt.Errorf("message should be at least %d bytes, got %d bytes", tch.Length, len(data)-4)
+	}
+	tch.Version = binary.BigEndian.Uint16(data[4:6]) // 9 - 10 bytes data[4:6]
 	tch.VersionDesc = verdesc(tch.Version)
 	tch.Random = data[6:38]                           // 11-42 data[6:38]
 	tch.SessionIDLength = data[38]                    // 43 data[38] 32 bytes
@@ -71,12 +105,15 @@ func (tch *TLSClientHello) Parse(data []byte) error {
 	tch.SessionID = data[39:sid]                      // data[39:71]
 	csl := binary.BigEndian.Uint16(data[sid : sid+2]) // data[71:73] suites count * 2 bytes
 	tch.CipherSuitesLength = csl
-	cmproffset := csl + 73 // 107
-	css := make([]*CipherSuite, 0, csl/2+1)
-	for i := range len(data[73:cmproffset]) {
-		val := binary.BigEndian.Uint16(data[i : i+2])
+	offset := uint16(sid + 2)  //73
+	cmproffset := csl + offset // 107
+	css := make([]*CipherSuite, 0, csl/2)
+	var i uint16
+	for i < csl {
+		val := binary.BigEndian.Uint16(data[i+offset : i+offset+2])
 		valdesc := csuitedesc(val)
 		css = append(css, &CipherSuite{Value: val, Desc: valdesc})
+		i += 2
 	}
 	tch.CipherSuites = css
 	cml := data[cmproffset] // 107
@@ -85,13 +122,13 @@ func (tch *TLSClientHello) Parse(data []byte) error {
 	tch.CmprMethods = data[cmproffset+1 : extoffset]                 // data[108:109]
 	extlen := binary.BigEndian.Uint16(data[extoffset : extoffset+2]) // data[109:111]
 	tch.ExtensionLength = extlen
-	var i = extoffset + 2
+	i = extoffset + 2
 	for i < extoffset+extlen {
 		typ := binary.BigEndian.Uint16(data[i : i+2])
 		length := binary.BigEndian.Uint16(data[i+2 : i+4])
 		switch typ {
 		case 0: // TODO: add more extensions
-			sn := ServerName{}
+			sn := &ServerName{}
 			err := sn.Parse(data[i : i+length+4])
 			if err != nil {
 				return err
@@ -116,17 +153,6 @@ type TLSServerHello struct {
 	CipherSuite     *CipherSuite
 	CmprMethod      uint8
 	ExtensionLength uint16
-}
-
-func (r *Record) String() string {
-	return fmt.Sprintf(` - Content Type: %s (%d)
- - Version: %s (%#04x)
- - Length: %d`,
-		r.ContentTypeDesc,
-		r.ContentType,
-		r.VersionDesc,
-		r.Version,
-		r.Length)
 }
 
 // port 443
