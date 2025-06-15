@@ -2,6 +2,7 @@ package layers
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"strings"
 )
@@ -12,22 +13,29 @@ const (
 	ClientHelloTLSVal = 0x01
 )
 
+type TLSVersion struct {
+	Value uint16
+	Desc  string
+}
+
+func (tv *TLSVersion) String() string {
+	return fmt.Sprintf("%s (%#04x)", tv.Desc, tv.Value)
+}
+
 type Record struct {
 	ContentType     uint8
 	ContentTypeDesc string
-	Version         uint16
-	VersionDesc     string
+	Version         *TLSVersion
 	Length          uint16
 	Data            []byte
 }
 
 func (r *Record) String() string {
 	return fmt.Sprintf(` - Content Type: %s (%d)
- - Version: %s (%#04x)
+ - Version: %s
  - Length: %d`,
 		r.ContentTypeDesc,
 		r.ContentType,
-		r.VersionDesc,
 		r.Version,
 		r.Length)
 }
@@ -40,6 +48,8 @@ func HSTLSParserByType(hstype uint8) HSTLSParser {
 	switch hstype {
 	case 1:
 		return &TLSClientHello{}
+	case 2:
+		return &TLSServerHello{}
 	}
 	return nil
 }
@@ -53,13 +63,22 @@ func (cs *CipherSuite) String() string {
 	return fmt.Sprintf("%s (%#x)", cs.Desc, cs.Value)
 }
 
+type Extension struct {
+	Value uint16
+	Desc  string
+}
+
+func (e *Extension) String() string {
+	return fmt.Sprintf("%s (%d)", e.Desc, e.Value)
+}
+
 type ServerName struct {
 	Type         uint16
 	Length       uint16
 	SNListLength uint16
 	SNType       uint8
 	SNNameLength uint16
-	SNName       []byte
+	SNName       string
 }
 
 func (sn *ServerName) Parse(data []byte) error {
@@ -68,24 +87,25 @@ func (sn *ServerName) Parse(data []byte) error {
 	sn.SNListLength = binary.BigEndian.Uint16(data[4:6])
 	sn.SNType = data[6]
 	sn.SNNameLength = binary.BigEndian.Uint16(data[7:9])
-	sn.SNName = data[9 : 9+sn.SNNameLength]
+	sn.SNName = string(data[9 : 9+sn.SNNameLength])
 	return nil
 }
 
 // https://wiki.osdev.org/TLS_Handshake#Client_Hello_Message
 type TLSClientHello struct {
 	Length             int // 3 bytes int(uint(b[2]) | uint(b[1])<<8 | uint(b[0])<<16))
-	Version            uint16
-	VersionDesc        string
+	Version            *TLSVersion
 	Random             []byte //32 bytes
 	SessionIDLength    uint8  // if 0 no session follows
-	SessionID          []byte
+	SessionID          string
 	CipherSuitesLength uint16
 	CipherSuites       []*CipherSuite
 	CmprMethodsLength  uint8  // usually 0x01
 	CmprMethods        []byte // usually 0x00
 	ExtensionLength    uint16
+	Extensions         []*Extension
 	ServerName         *ServerName
+	ALPN               []string
 }
 
 func (tch *TLSClientHello) ParseHS(data []byte) error {
@@ -97,12 +117,12 @@ func (tch *TLSClientHello) ParseHS(data []byte) error {
 	if len(data)-4 < tch.Length {
 		return fmt.Errorf("message should be at least %d bytes, got %d bytes", tch.Length, len(data)-4)
 	}
-	tch.Version = binary.BigEndian.Uint16(data[4:6]) // 9 - 10 bytes data[4:6]
-	tch.VersionDesc = verdesc(tch.Version)
+	ver := binary.BigEndian.Uint16(data[4:6]) // 9 - 10 bytes data[4:6]
+	tch.Version = &TLSVersion{Value: ver, Desc: verdesc(ver)}
 	tch.Random = data[6:38]                           // 11-42 data[6:38]
 	tch.SessionIDLength = data[38]                    // 43 data[38] 32 bytes
 	sid := tch.SessionIDLength + 39                   // 70
-	tch.SessionID = data[39:sid]                      // data[39:71]
+	tch.SessionID = hex.EncodeToString(data[39:sid])  // data[39:71]
 	csl := binary.BigEndian.Uint16(data[sid : sid+2]) // data[71:73] suites count * 2 bytes
 	tch.CipherSuitesLength = csl
 	offset := uint16(sid + 2)  //73
@@ -123,36 +143,88 @@ func (tch *TLSClientHello) ParseHS(data []byte) error {
 	extlen := binary.BigEndian.Uint16(data[extoffset : extoffset+2]) // data[109:111]
 	tch.ExtensionLength = extlen
 	i = extoffset + 2
+	exts := make([]*Extension, 0, 20)
 	for i < extoffset+extlen {
 		typ := binary.BigEndian.Uint16(data[i : i+2])
 		length := binary.BigEndian.Uint16(data[i+2 : i+4])
+		exts = append(exts, &Extension{Value: typ, Desc: extdesc(typ)})
 		switch typ {
-		case 0: // TODO: add more extensions
+		case 0: // SNI
 			sn := &ServerName{}
 			err := sn.Parse(data[i : i+length+4])
 			if err != nil {
 				return err
 			}
 			tch.ServerName = sn
-			i += length + 4
-		default:
-			i += length + 4
+		case 16: //ALPN
+			//skip data[i+4:i+6] alpn extension length
+			start := i + 6
+			alpns := make([]string, 0, 5)
+			for start < i+length+4 {
+				alpnStringLength := data[start]
+				nextProto := string(data[start+1 : start+uint16(alpnStringLength+1)])
+				alpns = append(alpns, nextProto)
+				start += uint16(alpnStringLength + 1)
+			}
+			tch.ALPN = alpns
 		}
+		i += length + 4
 	}
+	tch.Extensions = exts
 	return nil
 }
 
 // https://wiki.osdev.org/TLS_Handshake#Server_Hello_Message
 type TLSServerHello struct {
-	Length          int // 3 bytes int(uint(b[2]) | uint(b[1])<<8 | uint(b[0])<<16))
-	Version         uint16
-	VersionDesc     string
-	Random          []byte //32 bytes
-	SessionIDLength uint8  // if 0 no session follows
-	SessionID       []byte
-	CipherSuite     *CipherSuite
-	CmprMethod      uint8
-	ExtensionLength uint16
+	Length           int // 3 bytes int(uint(b[2]) | uint(b[1])<<8 | uint(b[0])<<16))
+	Version          *TLSVersion
+	Random           []byte //32 bytes
+	SessionIDLength  uint8  // if 0 no session follows
+	SessionID        string
+	CipherSuite      *CipherSuite
+	CmprMethod       uint8
+	ExtensionLength  uint16
+	Extensions       []*Extension
+	SupportedVersion *TLSVersion
+}
+
+func (tsh *TLSServerHello) ParseHS(data []byte) error {
+	// offset 7 bytes
+	if len(data) < 4 {
+		return fmt.Errorf("message should be at least 4 bytes, got %d bytes", len(data))
+	}
+	tsh.Length = int(uint(data[3]) | uint(data[2])<<8 | uint(data[1])<<16) // 6 - 8 bytes data[1:4]
+	if len(data)-4 < tsh.Length {
+		return fmt.Errorf("message should be at least %d bytes, got %d bytes", tsh.Length, len(data)-4)
+	}
+	ver := binary.BigEndian.Uint16(data[4:6]) // 9 - 10 bytes data[4:6]
+	tsh.Version = &TLSVersion{Value: ver, Desc: verdesc(ver)}
+	tsh.Random = data[6:38]                          // 11-42 data[6:38]
+	tsh.SessionIDLength = data[38]                   // 43 data[38] 32 bytes
+	sid := tsh.SessionIDLength + 39                  // 70
+	tsh.SessionID = hex.EncodeToString(data[39:sid]) // data[39:71]
+	val := binary.BigEndian.Uint16(data[sid : sid+2])
+	valdesc := csuitedesc(val)
+	tsh.CipherSuite = &CipherSuite{Value: val, Desc: valdesc}
+	tsh.CmprMethod = data[sid+2]
+	extoffset := uint16(sid + 3)
+	extlen := binary.BigEndian.Uint16(data[extoffset : extoffset+2])
+	tsh.ExtensionLength = extlen
+	exts := make([]*Extension, 0, 20)
+	i := extoffset + 2
+	for i < extoffset+extlen {
+		typ := binary.BigEndian.Uint16(data[i : i+2])
+		length := binary.BigEndian.Uint16(data[i+2 : i+4])
+		exts = append(exts, &Extension{Value: typ, Desc: extdesc(typ)})
+		switch typ {
+		case 43: // supported versions
+			ver := binary.BigEndian.Uint16(data[i+4 : i+6])
+			tsh.SupportedVersion = &TLSVersion{Value: ver, Desc: verdesc(ver)}
+		}
+		i += length + 4
+	}
+	tsh.Extensions = exts
+	return nil
 }
 
 // port 443
@@ -181,7 +253,7 @@ func (t *TLSMessage) Summary() string {
 				sb.WriteString(fmt.Sprintf("%s (%d) Len: %d ", rec.ContentTypeDesc, rec.ContentType, rec.Length))
 				continue
 			}
-			sb.WriteString(fmt.Sprintf("%s (%#04x) ", rec.VersionDesc, rec.Version))
+			sb.WriteString(rec.Version.String())
 			if rec.ContentType == 22 {
 				hstd := hstypedesc(rec.Data[0])
 				sb.WriteString(fmt.Sprintf("%s ", hstd))
@@ -230,8 +302,7 @@ func (t *TLSMessage) Parse(data []byte) error {
 		r := &Record{
 			ContentType:     ctype,
 			ContentTypeDesc: ctdesc,
-			Version:         ver,
-			VersionDesc:     verdesc,
+			Version:         &TLSVersion{Value: ver, Desc: verdesc},
 			Length:          rlen,
 			Data:            data[headerSizeTLS : headerSizeTLS+rlen],
 		}
