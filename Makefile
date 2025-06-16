@@ -44,4 +44,5 @@ cover:
 
 .PHONY: clean
 clean:
+	find ./bin ! -name '.gitignore' -type f -exec rm -vrf {} +
 	rm -v *.txt *.pcap*
