@@ -1,57 +1,78 @@
 package layers
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
+	"net/http"
+	"net/http/httputil"
+)
+
+var (
+	protohttp10 = []byte("HTTP/1.0")
+	protohttp11 = []byte("HTTP/1.1")
 )
 
 // https://developer.mozilla.org/en-US/docs/Web/HTTP/Messages
 // port 80
 type HTTPMessage struct {
-	summary []byte
-	data    []byte
+	Request  *http.Request
+	Response *http.Response
+}
+
+func (h *HTTPMessage) IsEmpty() bool {
+	return h.Request == nil && h.Response == nil
 }
 
 func (h *HTTPMessage) String() string {
+	m := ellipsis
+	if h.Request != nil {
+		m, _ = httputil.DumpRequest(h.Request, false)
+		m = joinBytes(dash, bytes.TrimRight(bytes.TrimSuffix(bytes.Join(bytes.Split(m, crlf), lfd), crlf), slfd))
+	} else if h.Response != nil {
+		m, _ = httputil.DumpResponse(h.Response, false)
+		m = joinBytes(dash, bytes.TrimRight(bytes.TrimSuffix(bytes.Join(bytes.Split(m, crlf), lfd), crlf), slfd))
+	}
 	return fmt.Sprintf(`%s
 %s
-`, h.Summary(), h.data)
-}
-func (h *HTTPMessage) Summary() string {
-	return fmt.Sprintf("HTTP Message: %s", h.summary)
+`, h.Summary(), m)
 }
 
-func (h *HTTPMessage) ellipsify() {
-	h.summary = contdata
-	h.data = ellipsis
+func (h *HTTPMessage) Summary() string {
+	m := fmt.Sprintf("HTTP Message: %s", contdata)
+	if h.Request != nil {
+		m = fmt.Sprintf("HTTP Request: %s %s%s%s %s Content-Length: %d",
+			h.Request.Method, h.Request.Host, h.Request.URL.Path, h.Request.URL.RawQuery, h.Request.Proto, h.Request.ContentLength)
+	} else if h.Response != nil {
+		m = fmt.Sprintf("HTTP Response: %s %s Content-Length: %d",
+			h.Response.Proto, h.Response.Status, h.Response.ContentLength)
+	}
+	return fmt.Sprintf("%s", m)
 }
 
 func (h *HTTPMessage) Parse(data []byte) error {
 
-	if !bytes.Contains(data, proto) {
-		h.ellipsify()
+	if !bytes.Contains(data, protohttp10) && !bytes.Contains(data, protohttp11) {
+		h.Request = nil
+		h.Response = nil
 		return nil
 	}
-
-	var idx int
-	if idx = bytes.Index(data, dcrlf); idx == -1 {
-		h.ellipsify()
-		return nil
-	}
-
-	sp := bytes.Split(data[:idx], crlf)
-	lsp := len(sp)
-	switch {
-	case lsp > 2:
-		h.summary = bytes.Join(sp[:2], bspace)
-		sp[0] = joinBytes(dash, sp[0])
-		h.data = bytes.TrimSuffix(bytes.Join(sp, lfd), crlf)
-	case lsp > 1:
-		h.summary = sp[0]
-		sp[0] = joinBytes(dash, sp[0])
-		h.data = bytes.TrimSuffix(bytes.Join(sp, lfd), crlf)
-	default:
-		h.ellipsify()
+	reader := bufio.NewReader(bytes.NewReader(data))
+	if bytes.HasPrefix(data, protohttp11) || bytes.HasPrefix(data, protohttp10) {
+		resp, err := http.ReadResponse(reader, nil)
+		if err != nil {
+			return err
+		}
+		h.Response = resp
+		h.Request = nil
+	} else {
+		reader := bufio.NewReader(bytes.NewReader(data))
+		req, err := http.ReadRequest(reader)
+		if err != nil {
+			return err
+		}
+		h.Request = req
+		h.Response = nil
 	}
 	return nil
 }

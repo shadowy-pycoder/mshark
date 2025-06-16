@@ -28,10 +28,10 @@ var (
 	bspace   = []byte(" ")
 	dash     = []byte("- ")
 	lfd      = []byte("\n- ")
+	slfd     = "\n- "
 	lf       = []byte("\n")
 	crlf     = []byte("\r\n")
 	dcrlf    = []byte("\r\n\r\n")
-	proto    = []byte("HTTP/1.1")
 	ellipsis = []byte("...")
 	contdata = []byte("Continuation data")
 )
