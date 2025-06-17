@@ -3,6 +3,7 @@ package layers
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httputil"
@@ -78,3 +79,47 @@ func (h *HTTPMessage) Parse(data []byte) error {
 }
 
 func (h *HTTPMessage) NextLayer() (layer string, payload []byte) { return }
+
+type HTTPRequestWrapper struct {
+	Request HTTPRequest `json:"http_request"`
+}
+
+type HTTPRequest struct {
+	Host          string      `json:"host,omitempty"`
+	URI           string      `json:"uri,omitempty"`
+	Method        string      `json:"method,omitempty"`
+	Proto         string      `json:"proto,omitempty"`
+	ContentLength int         `json:"content-length,omitempty"`
+	Header        http.Header `json:"header,omitempty"`
+}
+
+type HTTPResponseWrapper struct {
+	Response HTTPResponse `json:"http_response"`
+}
+
+type HTTPResponse struct {
+	Proto         string      `json:"proto,omitempty"`
+	Status        string      `json:"status,omitempty"`
+	ContentLength int         `json:"content-length,omitempty"`
+	Header        http.Header `json:"header,omitempty"`
+}
+
+func (h *HTTPMessage) MarshalJSON() ([]byte, error) {
+	if h.Request != nil {
+		return json.Marshal(&HTTPRequestWrapper{Request: HTTPRequest{
+			Host:          h.Request.Host,
+			URI:           h.Request.RequestURI,
+			Method:        h.Request.Method,
+			Proto:         h.Request.Proto,
+			ContentLength: int(h.Request.ContentLength),
+			Header:        h.Request.Header,
+		}})
+	} else if h.Response != nil {
+		return json.Marshal(&HTTPResponseWrapper{Response: HTTPResponse{
+			Proto:         h.Response.Proto,
+			Status:        h.Response.Status,
+			ContentLength: int(h.Response.ContentLength),
+			Header:        h.Response.Header}})
+	}
+	return nil, fmt.Errorf("both request and response are empty")
+}

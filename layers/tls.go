@@ -3,6 +3,7 @@ package layers
 import (
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -127,6 +128,47 @@ type TLSClientHello struct {
 	Extensions         []*Extension
 	ServerName         *ServerName
 	ALPN               []string
+}
+
+type TLSClientHelloRequestWrapper struct {
+	Request TLSClientHelloRequest `json:"tls_request"`
+}
+
+type TLSClientHelloRequest struct {
+	SNI          string   `json:"sni,omitempty"`
+	Type         string   `json:"type,omitempty"`
+	Version      string   `json:"version,omitempty"`
+	SessionID    string   `json:"session_id,omitempty"`
+	CipherSuites []string `json:"cipher_suites,omitempty"`
+	Extensions   []string `json:"extensions,omitempty"`
+	ALPN         []string `json:"alpn,omitempty"`
+}
+
+func (tch *TLSClientHello) MarshalJSON() ([]byte, error) {
+	cs := make([]string, 0, len(tch.CipherSuites))
+	for _, c := range tch.CipherSuites {
+		cs = append(cs, c.String())
+	}
+	es := make([]string, 0, len(tch.Extensions))
+	for _, e := range tch.Extensions {
+		es = append(es, e.String())
+	}
+	var ver, sn string
+	if tch.Version != nil {
+		ver = tch.Version.String()
+	}
+	if tch.ServerName != nil {
+		sn = tch.ServerName.SNName
+	}
+	return json.Marshal(&TLSClientHelloRequestWrapper{Request: TLSClientHelloRequest{
+		SNI:          sn,
+		Type:         fmt.Sprintf("%s (%d)", tch.TypeDesc, tch.Type),
+		Version:      ver,
+		SessionID:    tch.SessionID,
+		CipherSuites: cs,
+		Extensions:   es,
+		ALPN:         tch.ALPN,
+	}})
 }
 
 func (tch *TLSClientHello) String() string {
@@ -284,6 +326,44 @@ type TLSServerHello struct {
 	ExtensionLength  uint16
 	Extensions       []*Extension
 	SupportedVersion *TLSVersion
+}
+
+type TLSServerHelloResponseWrapper struct {
+	Response TLSServerHelloResponse `json:"tls_response"`
+}
+
+type TLSServerHelloResponse struct {
+	Type             string   `json:"type,omitempty"`
+	Version          string   `json:"version,omitempty"`
+	SessionID        string   `json:"session_id,omitempty"`
+	CipherSuite      string   `json:"cipher_suite,omitempty"`
+	Extensions       []string `json:"extensions,omitempty"`
+	SupportedVersion string   `json:"supported_version,omitempty"`
+}
+
+func (tsh *TLSServerHello) MarshalJSON() ([]byte, error) {
+	es := make([]string, 0, len(tsh.Extensions))
+	for _, e := range tsh.Extensions {
+		es = append(es, e.String())
+	}
+	var ver, supver, cs string
+	if tsh.Version != nil {
+		ver = tsh.Version.String()
+	}
+	if tsh.SupportedVersion != nil {
+		supver = tsh.SupportedVersion.String()
+	}
+	if tsh.CipherSuite != nil {
+		cs = tsh.CipherSuite.String()
+	}
+	return json.Marshal(&TLSServerHelloResponseWrapper{Response: TLSServerHelloResponse{
+		Type:             fmt.Sprintf("%s (%d)", tsh.TypeDesc, tsh.Type),
+		Version:          ver,
+		SessionID:        tsh.SessionID,
+		CipherSuite:      cs,
+		Extensions:       es,
+		SupportedVersion: supver,
+	}})
 }
 
 func (tsh *TLSServerHello) String() string {
