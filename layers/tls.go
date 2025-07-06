@@ -15,6 +15,8 @@ const (
 	ServerHelloTLSVal = 0x02
 )
 
+var TLSTooShortErr = fmt.Errorf("tls message too short")
+
 type TLSVersion struct {
 	Value uint16
 	Desc  string
@@ -117,7 +119,7 @@ type TLSClientHello struct {
 	TypeDesc           string
 	Length             int // 3 bytes int(uint(b[2]) | uint(b[1])<<8 | uint(b[0])<<16))
 	Version            *TLSVersion
-	Random             []byte //32 bytes
+	Random             []byte // 32 bytes
 	SessionIDLength    uint8  // if 0 no session follows
 	SessionID          string
 	CipherSuitesLength uint16
@@ -178,12 +180,12 @@ func (tch *TLSClientHello) String() string {
  - Random: %s
  - SessionIDLength: %d
  - SessionID: %s
- - CipherSuitesLength: %d 
+ - CipherSuitesLength: %d
  - CipherSuites: %v
  - CmprMethodsLength: %d
- - CmprMethods: %v 
+ - CmprMethods: %v
  - ExtensionLength: %d
- - Extensions: %v  
+ - Extensions: %v
  - %s
  - ALPN: %v
 `,
@@ -233,7 +235,7 @@ func (tch *TLSClientHello) ParseHS(data []byte) error {
 	}
 	csl := binary.BigEndian.Uint16(data[sid : sid+2]) // data[71:73] suites count * 2 bytes
 	tch.CipherSuitesLength = csl
-	offset := uint16(sid + 2)  //73
+	offset := uint16(sid + 2)  // 73
 	cmproffset := csl + offset // 107
 	css := make([]*CipherSuite, 0, csl/2)
 	var i uint16
@@ -285,8 +287,8 @@ func (tch *TLSClientHello) ParseHS(data []byte) error {
 				return err
 			}
 			tch.ServerName = sn
-		case 16: //ALPN
-			//skip data[i+4:i+6] alpn extension length
+		case 16: // ALPN
+			// skip data[i+4:i+6] alpn extension length
 			if len(data) < int(i+6) {
 				return nil
 			}
@@ -318,7 +320,7 @@ type TLSServerHello struct {
 	TypeDesc         string
 	Length           int // 3 bytes int(uint(b[2]) | uint(b[1])<<8 | uint(b[0])<<16))
 	Version          *TLSVersion
-	Random           []byte //32 bytes
+	Random           []byte // 32 bytes
 	SessionIDLength  uint8  // if 0 no session follows
 	SessionID        string
 	CipherSuite      *CipherSuite
@@ -374,10 +376,10 @@ func (tsh *TLSServerHello) String() string {
  - SessionIDLength: %d
  - SessionID: %s
  - CipherSuite: %s
- - CmprMethod: %d 
+ - CmprMethod: %d
  - ExtensionLength: %d
- - Extensions: %v  
- - Supported Version: %s 
+ - Extensions: %v
+ - Supported Version: %s
 `,
 		tsh.TypeDesc,
 		tsh.Type,
@@ -539,7 +541,7 @@ func (t *TLSMessage) printRecords() string {
 func (t *TLSMessage) Parse(data []byte) error {
 	t.Records = make([]*Record, 0, 5)
 	if len(data) < headerSizeTLS {
-		return nil
+		return TLSTooShortErr
 	}
 	for len(data) > 0 {
 		ctype := data[0]
@@ -1388,6 +1390,7 @@ func csuitedesc(csuite uint16) string {
 	}
 	return csuitedesc
 }
+
 func extdesc(ext uint16) string {
 	var extdesc string
 	switch ext {

@@ -51,7 +51,8 @@ func NewWriter(w io.Writer, verbose bool) *Writer {
 	return &Writer{
 		w:       w,
 		stdout:  w == os.Stdout,
-		verbose: verbose}
+		verbose: verbose,
+	}
 }
 
 // printPacket prints a layer packet to the writer. If the writer is an instance of os.Stdout,
@@ -161,7 +162,6 @@ func InterfaceByName(name string) (*net.Interface, error) {
 // OpenLive opens a live capture based on the given configuration and writes
 // all captured packets to the given PacketWriters.
 func OpenLive(conf *Config, pw ...PacketWriter) error {
-
 	packetcfg := packet.Config{}
 
 	// setting up filter
@@ -237,7 +237,7 @@ func OpenLive(conf *Config, pw ...PacketWriter) error {
 			return fmt.Errorf("failed to read Ethernet frame: %v", err)
 		}
 		for _, w := range pw {
-			if err := w.WritePacket(time.Now().UTC(), b[:n]); err != nil {
+			if err := w.WritePacket(time.Now().UTC(), b[:n]); err != nil && !errors.Is(err, layers.TLSTooShortErr) {
 				return err
 			}
 		}
