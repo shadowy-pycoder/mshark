@@ -1,3 +1,4 @@
+// Package mshark is a simple packet capture tool
 package mshark
 
 import (
@@ -220,10 +221,7 @@ func OpenLive(conf *Config, pw ...PacketWriter) error {
 	}()
 
 	// number of packets
-	count := conf.PacketCount
-	if count < 0 {
-		count = 0
-	}
+	count := max(0, conf.PacketCount)
 	infinity := count == 0
 
 	b := make([]byte, conf.Snaplen)
