@@ -102,7 +102,7 @@ func root(args []string) error {
 	)
 	flags.DurationVar(&conf.Timeout, "t", 0, "The maximum duration of the packet capture process. Example: 5s")
 	flags.IntVar(&conf.PacketCount, "c", 0, "The maximum number of packets to capture.")
-	packetBuffer := flags.Int("b", 4096, "The maximum size of packet queue.")
+	packetBuffer := flags.Int("b", 8192, "The maximum size of packet queue.")
 	flags.StringVar(&conf.Expr, "e", "", `BPF filter expression. Example: "ip proto tcp".`)
 	flags.BoolFunc("D", "Display list of interfaces and exit.", func(flagValue string) error {
 		if err := displayInterfaces(); err != nil {
@@ -143,7 +143,7 @@ func root(args []string) error {
 	conf.Snaplen = *snaplen
 
 	if *packetBuffer <= 0 {
-		*packetBuffer = 4096
+		*packetBuffer = 8192
 	}
 	conf.PacketBuffer = *packetBuffer
 

@@ -38,7 +38,7 @@ type Config struct {
 	Promisc      bool           // Promiscuous mode. This setting is ignored for "any" interface.
 	Timeout      time.Duration  // The maximum duration of the packet capture process.
 	PacketCount  int            // The maximum number of packets to capture.
-	PacketBuffer int            // The maximum size for packet buffer (Default: 4096)
+	PacketBuffer int            // The maximum size for packet buffer (Default: 8192)
 	Expr         string         // BPF filter expression.
 }
 
@@ -114,7 +114,7 @@ func (mw *Writer) WritePacket(timestamp time.Time, data []byte) error {
 //   - Promiscuous Mode: true
 //   - Timeout: 5s
 //   - Number of Packets: 0
-//   - Packet Buffer Size: 4096
+//   - Packet Buffer Size: 8192
 //   - BPF Filter: "ip proto tcp"
 //   - Verbose: true
 func (mw *Writer) WriteHeader(c *Config) error {
@@ -244,7 +244,7 @@ func OpenLive(conf *Config, pw ...PacketWriter) error {
 
 	b := make([]byte, conf.Snaplen)
 	if conf.PacketBuffer <= 0 {
-		conf.PacketBuffer = 4096
+		conf.PacketBuffer = 8192
 	}
 	packetQueue := make(chan []byte, conf.PacketBuffer)
 

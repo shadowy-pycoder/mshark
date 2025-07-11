@@ -549,15 +549,21 @@ func (t *TLSMessage) Parse(data []byte) error {
 		if ctdesc == "Unknown" {
 			break
 		}
+		if len(data) < 3 {
+			break
+		}
 		ver := binary.BigEndian.Uint16(data[1:3])
 		verdesc := verdesc(ver)
 		if verdesc == "Unknown" {
 			break
 		}
+		if len(data) < headerSizeTLS {
+			break
+		}
 		rlen := binary.BigEndian.Uint16(data[3:headerSizeTLS])
-		rb := uint16(headerSizeTLS + rlen)
-		if rb > uint16(len(data)) {
-			rb = uint16(len(data))
+		rb := min(uint16(headerSizeTLS+rlen), uint16(len(data)))
+		if rb < headerSizeTLS {
+			break
 		}
 		r := &Record{
 			ContentType:     ctype,

@@ -51,7 +51,7 @@ Options:
   -h    Show this help message and exit.
   -D    Display list of interfaces and exit.
   -b int
-        The maximum size of packet queue. (default 4096)
+        The maximum size of packet queue. (default 8192)
   -c int
         The maximum number of packets to capture.
   -e string
@@ -84,7 +84,7 @@ Output:
 - Promiscuous Mode: true
 - Timeout: 0s
 - Number of Packets: 0
-- Packet Buffer Size: 4096
+- Packet Buffer Size: 8192
 - BPF Filter: "port 53"
 - Verbose: false
 ```
