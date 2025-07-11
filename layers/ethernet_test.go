@@ -26,6 +26,8 @@ func TestParseEthernet(t *testing.T) {
 		SrcMAC:    net.HardwareAddr{0x43, 0x40, 0x8d, 0x28, 0xca, 0x0b},
 		EtherType: &EthernetType{Val: 0x0800, Desc: "IPv4"},
 		Payload:   []byte{},
+		DstVendor: net.HardwareAddr{0x7b, 0x13, 0x0b, 0x87, 0xea, 0x51}.String(),
+		SrcVendor: net.HardwareAddr{0x43, 0x40, 0x8d, 0x28, 0xca, 0x0b}.String(),
 	}
 	eth := &EthernetFrame{}
 	packet, close := testPacket(t, "ethernet")
