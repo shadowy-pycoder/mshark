@@ -114,6 +114,7 @@ func (mw *Writer) WritePacket(timestamp time.Time, data []byte) error {
 //   - Promiscuous Mode: true
 //   - Timeout: 5s
 //   - Number of Packets: 0
+//   - Packet Buffer Size: 4096
 //   - BPF Filter: "ip proto tcp"
 //   - Verbose: true
 func (mw *Writer) WriteHeader(c *Config) error {
