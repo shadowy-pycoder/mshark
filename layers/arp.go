@@ -6,7 +6,7 @@ import (
 	"net"
 	"net/netip"
 
-	"github.com/shadowy-pycoder/oui"
+	"github.com/shadowy-pycoder/mshark/oui"
 )
 
 const headerSizeARP = 28

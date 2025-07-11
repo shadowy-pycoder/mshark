@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/shadowy-pycoder/oui"
+	"github.com/shadowy-pycoder/mshark/oui"
 )
 
 const headerSizeEthernet = 14
