@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net"
+
+	"github.com/shadowy-pycoder/oui"
 )
 
 const headerSizeEthernet = 14
@@ -33,6 +35,8 @@ type EthernetFrame struct {
 	SrcMAC    net.HardwareAddr // MAC address of the source device.
 	EtherType *EthernetType    // The protocol of the upper layer.
 	Payload   []byte
+	dstVendor string
+	srcVendor string
 }
 
 func NewEthernetFrame(dstMAC, srcMAC net.HardwareAddr, et EtherType, payload []byte) (*EthernetFrame, error) {
@@ -44,26 +48,30 @@ func NewEthernetFrame(dstMAC, srcMAC net.HardwareAddr, et EtherType, payload []b
 		SrcMAC:    srcMAC,
 		EtherType: &EthernetType{Val: et, Desc: ethertypedesc(et)},
 		Payload:   payload,
+		dstVendor: oui.VendorWithMAC(dstMAC),
+		srcVendor: oui.VendorWithMAC(srcMAC),
 	}, nil
 }
 
 func (ef *EthernetFrame) String() string {
 	return fmt.Sprintf(`%s
-- DstMAC: %s
-- SrcMAC: %s
+- DstMAC: %s (%s)
+- SrcMAC: %s (%s)
 - EtherType: %s
 - Payload: %d bytes
 %s`,
 		ef.Summary(),
 		ef.DstMAC,
+		ef.dstVendor,
 		ef.SrcMAC,
+		ef.srcVendor,
 		ef.EtherType,
 		len(ef.Payload),
 		hex.Dump(ef.ToBytes()))
 }
 
 func (ef *EthernetFrame) Summary() string {
-	return fmt.Sprintf("Ethernet Frame: Src MAC: %s →  Dst MAC: %s", ef.SrcMAC, ef.DstMAC)
+	return fmt.Sprintf("Ethernet Frame: Src MAC: %s →  Dst MAC: %s", ef.srcVendor, ef.dstVendor)
 }
 
 func (ef *EthernetFrame) MarshalBinary() ([]byte, error) {
@@ -90,6 +98,8 @@ func (ef *EthernetFrame) UnmarshalBinary(data []byte) error {
 	etdesc := ethertypedesc(et)
 	ef.EtherType = &EthernetType{Val: et, Desc: etdesc}
 	ef.Payload = data[headerSizeEthernet:]
+	ef.dstVendor = oui.VendorWithMAC(ef.DstMAC)
+	ef.srcVendor = oui.VendorWithMAC(ef.SrcMAC)
 	return nil
 }
 

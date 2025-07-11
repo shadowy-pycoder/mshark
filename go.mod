@@ -1,10 +1,11 @@
 module github.com/shadowy-pycoder/mshark
 
-go 1.23.0
+go 1.24.1
 
 require (
 	github.com/mdlayher/packet v1.1.2
 	github.com/packetcap/go-pcap v0.0.0-20240528124601-8c87ecf5dbc5
+	github.com/shadowy-pycoder/oui v0.5.2
 	github.com/stretchr/testify v1.9.0
 	golang.org/x/net v0.28.0
 )

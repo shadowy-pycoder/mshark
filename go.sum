@@ -14,6 +14,8 @@ github.com/packetcap/go-pcap v0.0.0-20240528124601-8c87ecf5dbc5 h1:p4VuaitqUAqSZ
 github.com/packetcap/go-pcap v0.0.0-20240528124601-8c87ecf5dbc5/go.mod h1:zIAoVKeWP0mz4zXY50UYQt6NLg2uwKRswMDcGEqOms4=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
+github.com/shadowy-pycoder/oui v0.5.2 h1:865RE2ohoKxLFtUmQVfb/3LWaWyzREy0ksjTl4LdfsY=
+github.com/shadowy-pycoder/oui v0.5.2/go.mod h1:CLMFNpxNZ1ftiy+zCImvM15kVHjW7L1o8ehiTO5Dim8=
 github.com/stretchr/testify v1.9.0 h1:HtqpIVDClZ4nwg75+f6Lvsy/wHu+3BoSGCbBAcpTsTg=
 github.com/stretchr/testify v1.9.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
 golang.org/x/net v0.28.0 h1:a9JDOJc5GMUJ0+UDqmLT86WiEy7iWyIhz8gz8E4e5hE=

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+
+	"github.com/shadowy-pycoder/oui"
 )
 
 const headerSizeARP = 28
@@ -45,6 +47,8 @@ type ARPPacket struct {
 	// In an ARP reply this field is used to indicate the address of the host that originated the ARP request.
 	TargetMAC net.HardwareAddr
 	TargetIP  netip.Addr // Internetwork address of the intended receiver.
+	dstVendor string
+	srcVendor string
 }
 
 func NewARPPacket(
@@ -71,6 +75,8 @@ func NewARPPacket(
 		SenderIP:         senderIP,
 		TargetMAC:        targetMAC,
 		TargetIP:         targetIP,
+		dstVendor:        oui.VendorWithMAC(targetMAC),
+		srcVendor:        oui.VendorWithMAC(senderMAC),
 	}, nil
 }
 
@@ -81,9 +87,9 @@ func (ap *ARPPacket) String() string {
 - HLen: %d
 - PLen: %d
 - Operation: %s
-- Sender MAC Address: %s
+- Sender MAC Address: %s (%s)
 - Sender IP Address: %s
-- Target MAC Address: %s
+- Target MAC Address: %s (%s)
 - Target IP Address: %s
 `,
 		ap.Summary(),
@@ -94,8 +100,10 @@ func (ap *ARPPacket) String() string {
 		ap.Plen,
 		ap.Op,
 		ap.SenderMAC,
+		ap.srcVendor,
 		ap.SenderIP,
 		ap.TargetMAC,
+		ap.dstVendor,
 		ap.TargetIP,
 	)
 }
@@ -167,6 +175,8 @@ func (ap *ARPPacket) UnmarshalBinary(data []byte) error {
 	if !ok {
 		return fmt.Errorf("failed parsing target IP address")
 	}
+	ap.dstVendor = oui.VendorWithMAC(ap.TargetMAC)
+	ap.srcVendor = oui.VendorWithMAC(ap.SenderMAC)
 	return nil
 }
 
