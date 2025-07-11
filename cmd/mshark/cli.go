@@ -102,6 +102,7 @@ func root(args []string) error {
 	)
 	flags.DurationVar(&conf.Timeout, "t", 0, "The maximum duration of the packet capture process. Example: 5s")
 	flags.IntVar(&conf.PacketCount, "c", 0, "The maximum number of packets to capture.")
+	packetBuffer := flags.Int("b", 4096, "The maximum size of packet queue.")
 	flags.StringVar(&conf.Expr, "e", "", `BPF filter expression. Example: "ip proto tcp".`)
 	flags.BoolFunc("D", "Display list of interfaces and exit.", func(flagValue string) error {
 		if err := displayInterfaces(); err != nil {
@@ -140,6 +141,11 @@ func root(args []string) error {
 		*snaplen = 65535
 	}
 	conf.Snaplen = *snaplen
+
+	if *packetBuffer <= 0 {
+		*packetBuffer = 4096
+	}
+	conf.PacketBuffer = *packetBuffer
 
 	// creating writers and writing headers depending on a file extension
 	var pw []ms.PacketWriter

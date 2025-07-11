@@ -33,12 +33,13 @@ type PacketWriter interface {
 }
 
 type Config struct {
-	Device      *net.Interface // The name of the network interface ("any" means listen on all interfaces).
-	Snaplen     int            // The maximum length of each packet snapshot.
-	Promisc     bool           // Promiscuous mode. This setting is ignored for "any" interface.
-	Timeout     time.Duration  // The maximum duration of the packet capture process.
-	PacketCount int            // The maximum number of packets to capture.
-	Expr        string         // BPF filter expression.
+	Device       *net.Interface // The name of the network interface ("any" means listen on all interfaces).
+	Snaplen      int            // The maximum length of each packet snapshot.
+	Promisc      bool           // Promiscuous mode. This setting is ignored for "any" interface.
+	Timeout      time.Duration  // The maximum duration of the packet capture process.
+	PacketCount  int            // The maximum number of packets to capture.
+	PacketBuffer int            // The maximum size for packet buffer (Default: 4096)
+	Expr         string         // BPF filter expression.
 }
 
 type Writer struct {
@@ -121,6 +122,7 @@ func (mw *Writer) WriteHeader(c *Config) error {
 - Promiscuous Mode: %v
 - Timeout: %s
 - Number of Packets: %d
+- Packet Buffer Size: %d
 - BPF Filter: %q
 - Verbose: %v
 
@@ -130,6 +132,7 @@ func (mw *Writer) WriteHeader(c *Config) error {
 		c.Device.Name != "any" && c.Promisc,
 		c.Timeout,
 		c.PacketCount,
+		c.PacketBuffer,
 		c.Expr,
 		mw.verbose,
 	)
@@ -239,10 +242,31 @@ func OpenLive(conf *Config, pw ...PacketWriter) error {
 	infinity := count == 0
 
 	b := make([]byte, conf.Snaplen)
+	if conf.PacketBuffer <= 0 {
+		conf.PacketBuffer = 4096
+	}
+	packetQueue := make(chan []byte, conf.PacketBuffer)
+
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			case packet, ok := <-packetQueue:
+				if !ok {
+					return
+				}
+				for _, w := range pw {
+					w.WritePacket(time.Now().UTC(), packet)
+				}
+			}
+		}
+	}()
 
 	for i := 0; infinity || i < count; i++ {
 		select {
 		case <-done:
+			close(packetQueue)
 			return nil
 		default:
 			n, _, err := c.ReadFrom(b)
@@ -252,11 +276,8 @@ func OpenLive(conf *Config, pw ...PacketWriter) error {
 				}
 				return fmt.Errorf("failed to read Ethernet frame: %v", err)
 			}
-			for _, w := range pw {
-				if err := w.WritePacket(time.Now().UTC(), b[:n]); err != nil && !errors.Is(err, layers.ErrTLSTooShort) {
-					return err
-				}
-			}
+			p := append([]byte(nil), b[:n]...)
+			packetQueue <- p
 		}
 	}
 	return nil
