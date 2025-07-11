@@ -25,7 +25,7 @@ func (ao *ARPOperation) String() string {
 	return fmt.Sprintf("%s (%d)", ao.Desc, ao.Val)
 }
 
-// The Address Resolution Protocol (ARP) is a communication protocol
+// ARPPacket represents The Address Resolution Protocol (ARP) that is a communication protocol
 // used for discovering the link layer address, such as a MAC address,
 // associated with a given internet layer address, typically an IPv4 address.
 // Defined in RFC 826.
@@ -47,7 +47,7 @@ type ARPPacket struct {
 	TargetIP  netip.Addr // Internetwork address of the intended receiver.
 }
 
-func New(
+func NewARPPacket(
 	op Operation,
 	senderMAC net.HardwareAddr,
 	senderIP netip.Addr,
@@ -106,7 +106,7 @@ func (ap *ARPPacket) Summary() string {
 	case OperationRequest:
 		message = fmt.Sprintf("ARP Packet: (%s) Who has %s? Tell %s", ap.Op.Desc, ap.TargetIP, ap.SenderIP)
 	case OperationReply:
-		message = fmt.Sprintf("ARP Packet: (%s) %s at %s", ap.Op.Desc, ap.SenderIP, ap.SenderMAC)
+		message = fmt.Sprintf("ARP Packet: (%s) %s is at %s", ap.Op.Desc, ap.SenderIP, ap.SenderMAC)
 	default:
 		message = fmt.Sprintf("ARP Packet: (%s)", ap.Op.Desc)
 	}
@@ -115,23 +115,24 @@ func (ap *ARPPacket) Summary() string {
 
 // MarshalBinary implements encoding.BinaryMarshaler interface
 func (ap *ARPPacket) MarshalBinary() ([]byte, error) {
-	buf := make([]byte, 2+2+1+1+2+(ap.Plen*2)+(ap.Hlen*2))
-	binary.BigEndian.PutUint16(buf[0:2], ap.HardwareType)
-	binary.BigEndian.PutUint16(buf[2:4], ap.ProtocolType)
-	buf[4] = ap.Hlen
-	buf[5] = ap.Plen
-	binary.BigEndian.PutUint16(buf[6:8], uint16(ap.Op.Val))
+	b := make([]byte, 2+2+1+1+2+(ap.Plen*2)+(ap.Hlen*2))
+	binary.BigEndian.PutUint16(b[0:2], ap.HardwareType)
+	binary.BigEndian.PutUint16(b[2:4], ap.ProtocolType)
+	b[4] = ap.Hlen
+	b[5] = ap.Plen
+	binary.BigEndian.PutUint16(b[6:8], uint16(ap.Op.Val))
 	hoffset := 8 + ap.Hlen
 	poffset := hoffset + ap.Plen
-	copy(buf[8:hoffset], ap.SenderMAC)
-	copy(buf[hoffset:poffset], ap.SenderIP.AsSlice())
-	copy(buf[poffset:poffset+ap.Hlen], ap.TargetMAC)
-	copy(buf[poffset+ap.Hlen:poffset+ap.Hlen+ap.Plen], ap.TargetIP.AsSlice())
-	return buf, nil
+	copy(b[8:hoffset], ap.SenderMAC)
+	copy(b[hoffset:poffset], ap.SenderIP.AsSlice())
+	copy(b[poffset:poffset+ap.Hlen], ap.TargetMAC)
+	copy(b[poffset+ap.Hlen:poffset+ap.Hlen+ap.Plen], ap.TargetIP.AsSlice())
+	return b, nil
 }
 
-func (ap *ARPPacket) ToBytes() ([]byte, error) {
-	return ap.MarshalBinary()
+func (ap *ARPPacket) ToBytes() []byte {
+	b, _ := ap.MarshalBinary()
+	return b
 }
 
 // UnmarshalBinary implements encoding.BinaryUnmarshaler interface

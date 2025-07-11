@@ -22,11 +22,10 @@ func BenchmarkParseEthernet(b *testing.B) {
 
 func TestParseEthernet(t *testing.T) {
 	expected := &EthernetFrame{
-		DstMAC:        net.HardwareAddr{0x7b, 0x13, 0x0b, 0x87, 0xea, 0x51},
-		SrcMAC:        net.HardwareAddr{0x43, 0x40, 0x8d, 0x28, 0xca, 0x0b},
-		EtherType:     0x0800,
-		EtherTypeDesc: "IPv4",
-		payload:       []byte{},
+		DstMAC:    net.HardwareAddr{0x7b, 0x13, 0x0b, 0x87, 0xea, 0x51},
+		SrcMAC:    net.HardwareAddr{0x43, 0x40, 0x8d, 0x28, 0xca, 0x0b},
+		EtherType: &EthernetType{Val: 0x0800, Desc: "IPv4"},
+		Payload:   []byte{},
 	}
 	eth := &EthernetFrame{}
 	packet, close := testPacket(t, "ethernet")

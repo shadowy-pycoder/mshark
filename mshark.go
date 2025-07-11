@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/signal"
 	"time"
 
 	"github.com/mdlayher/packet"
@@ -203,6 +204,8 @@ func OpenLive(conf *Config, pw ...PacketWriter) error {
 		}
 	}
 
+	done := make(chan bool)
+
 	defer func() {
 		stats, err := c.Stats()
 		if err != nil {
@@ -211,13 +214,24 @@ func OpenLive(conf *Config, pw ...PacketWriter) error {
 			fmt.Printf("- Packets: %d, Drops: %d, Freeze Queue Count: %d\n",
 				stats.Packets, stats.Drops, stats.FreezeQueueCount)
 			for _, w := range pw {
-				if w, ok := w.(*Writer); ok {
+				if w, ok := w.(*Writer); ok && w.w == os.Stdout {
 					fmt.Fprintf(w.w, "- Packets Captured: %d\n", w.packets)
+					break
 				}
 			}
 		}
 		// close Conn
-		c.Close()
+		err = c.Close()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed closing connection: %v", err)
+		}
+	}()
+
+	go func() {
+		quit := make(chan os.Signal, 1)
+		signal.Notify(quit, os.Interrupt)
+		<-quit
+		close(done)
 	}()
 
 	// number of packets
@@ -227,16 +241,21 @@ func OpenLive(conf *Config, pw ...PacketWriter) error {
 	b := make([]byte, conf.Snaplen)
 
 	for i := 0; infinity || i < count; i++ {
-		n, _, err := c.ReadFrom(b)
-		if err != nil {
-			if errors.Is(err, os.ErrDeadlineExceeded) {
-				return nil
+		select {
+		case <-done:
+			return nil
+		default:
+			n, _, err := c.ReadFrom(b)
+			if err != nil {
+				if errors.Is(err, os.ErrDeadlineExceeded) {
+					return nil
+				}
+				return fmt.Errorf("failed to read Ethernet frame: %v", err)
 			}
-			return fmt.Errorf("failed to read Ethernet frame: %v", err)
-		}
-		for _, w := range pw {
-			if err := w.WritePacket(time.Now().UTC(), b[:n]); err != nil && !errors.Is(err, layers.TLSTooShortErr) {
-				return err
+			for _, w := range pw {
+				if err := w.WritePacket(time.Now().UTC(), b[:n]); err != nil && !errors.Is(err, layers.ErrTLSTooShort) {
+					return err
+				}
 			}
 		}
 	}
