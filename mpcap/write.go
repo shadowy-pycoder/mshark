@@ -1,3 +1,4 @@
+// Package mpcap implements PCAP Capture File Format
 package mpcap
 
 import (

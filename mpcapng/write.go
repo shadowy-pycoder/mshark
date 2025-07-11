@@ -1,3 +1,4 @@
+// Package mpcapng implements PCAP Next Generation (pcapng) Capture File Format
 package mpcapng
 
 import (

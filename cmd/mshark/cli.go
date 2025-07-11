@@ -19,17 +19,17 @@ import (
 const app string = "mshark"
 
 const usagePrefix string = `
-                ______   __                            __       
-               /      \ |  \                          |  \      
- ______ ____  |  $$$$$$\| $$____    ______    ______  | $$   __ 
+                ______   __                            __
+               /      \ |  \                          |  \
+ ______ ____  |  $$$$$$\| $$____    ______    ______  | $$   __
 |      \    \ | $$___\$$| $$    \  |      \  /      \ | $$  /  \
 | $$$$$$\$$$$\ \$$    \ | $$$$$$$\  \$$$$$$\|  $$$$$$\| $$_/  $$
-| $$ | $$ | $$ _\$$$$$$\| $$  | $$ /      $$| $$   \$$| $$   $$ 
-| $$ | $$ | $$|  \__| $$| $$  | $$|  $$$$$$$| $$      | $$$$$$\ 
+| $$ | $$ | $$ _\$$$$$$\| $$  | $$ /      $$| $$   \$$| $$   $$
+| $$ | $$ | $$|  \__| $$| $$  | $$|  $$$$$$$| $$      | $$$$$$\
 | $$ | $$ | $$ \$$    $$| $$  | $$ \$$    $$| $$      | $$  \$$\
  \$$  \$$  \$$  \$$$$$$  \$$   \$$  \$$$$$$$ \$$       \$$   \$$
-                                                                                                                                                                                              
-Packet Capture Tool by shadowy-pycoder 
+
+Packet Capture Tool by shadowy-pycoder
 
 GitHub: https://github.com/shadowy-pycoder/mshark
 
@@ -79,7 +79,7 @@ func displayInterfaces() error {
 
 func createFile(app, ext string) (*os.File, error) {
 	path := fmt.Sprintf("./%s_%s.%s", app, time.Now().UTC().Format("20060102_150405"), ext)
-	f, err := os.OpenFile(filepath.FromSlash(path), os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(filepath.FromSlash(path), os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file: %v", err)
 	}
@@ -92,10 +92,14 @@ func root(args []string) error {
 	flags := flag.NewFlagSet(app, flag.ExitOnError)
 	iface := flags.String("i", "any", "The name of the network interface. Example: eth0")
 	snaplen := flags.Int("s", 0, "The maximum length of each packet snapshot. Defaults to 65535.")
-	flags.BoolFunc("p", `Promiscuous mode. This setting is ignored for "any" interface. Defaults to false.`, func(flagValue string) error {
-		conf.Promisc = true
-		return nil
-	})
+	flags.BoolFunc(
+		"p",
+		`Promiscuous mode. This setting is ignored for "any" interface. Defaults to false.`,
+		func(flagValue string) error {
+			conf.Promisc = true
+			return nil
+		},
+	)
 	flags.DurationVar(&conf.Timeout, "t", 0, "The maximum duration of the packet capture process. Example: 5s")
 	flags.IntVar(&conf.PacketCount, "c", 0, "The maximum number of packets to capture.")
 	flags.StringVar(&conf.Expr, "e", "", `BPF filter expression. Example: "ip proto tcp".`)
@@ -193,8 +197,5 @@ func root(args []string) error {
 		}
 		pw = append(pw, w)
 	}
-	if err := ms.OpenLive(&conf, pw...); err != nil {
-		return err
-	}
-	return nil
+	return ms.OpenLive(&conf, pw...)
 }
