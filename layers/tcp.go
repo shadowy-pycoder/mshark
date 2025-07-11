@@ -3,45 +3,40 @@ package layers
 import (
 	"encoding/binary"
 	"fmt"
+	"strings"
 )
 
 const headerSizeTCP = 20
 
+var tcpFlags = []string{"CWR", "ECE", "URG", "ACK", "PSH", "RST", "SYN", "FIN"}
+
+type TCPFlag struct {
+	Val  uint8
+	Desc string
+}
+
 type TCPFlags struct {
 	Raw uint8
-	CWR uint8
-	ECE uint8
-	URG uint8
-	ACK uint8
-	PSH uint8
-	RST uint8
-	SYN uint8
-	FIN uint8
+	Val []*TCPFlag
 }
 
 func (t *TCPFlags) String() string {
-	return fmt.Sprintf("CWR %d ECE %d URG %d ACK %d PSH %d RST %d SYN %d FIN %d",
-		t.CWR,
-		t.ECE,
-		t.URG,
-		t.ACK,
-		t.PSH,
-		t.RST,
-		t.SYN,
-		t.FIN)
+	var sb strings.Builder
+	for _, flag := range t.Val {
+		if flag.Val == 1 {
+			sb.WriteString(flag.Desc)
+			sb.WriteString(" ")
+		}
+	}
+	return strings.TrimSpace(sb.String())
 }
 
 func newTCPFlags(flags uint8) *TCPFlags {
-	return &TCPFlags{
-		Raw: flags,
-		CWR: (flags >> 7) & 1,
-		ECE: (flags >> 6) & 1,
-		URG: (flags >> 5) & 1,
-		ACK: (flags >> 4) & 1,
-		PSH: (flags >> 3) & 1,
-		RST: (flags >> 2) & 1,
-		SYN: (flags >> 1) & 1,
-		FIN: flags & 1}
+	f := TCPFlags{Raw: flags, Val: make([]*TCPFlag, 0, 8)}
+	for i, flag := range tcpFlags {
+		f.Val = append(f.Val, &TCPFlag{Val: (flags >> (7 - i)) & 1, Desc: flag})
+	}
+	return &f
 }
 
 // TCP protocol is described in RFC 761.
@@ -78,7 +73,7 @@ func (t *TCPSegment) String() string {
 - Acknowledgment Number: %d
 - Data Offset: %d
 - Reserved: %d
-- Flags: %s
+- Flags: %s (%#08b)
 - Window Size: %d
 - Checksum: %#04x
 - Urgent Pointer: %d
@@ -93,6 +88,7 @@ func (t *TCPSegment) String() string {
 		t.DataOffset,
 		t.Reserved,
 		t.Flags,
+		t.Flags.Raw,
 		t.WindowSize,
 		t.Checksum,
 		t.UrgentPointer,
