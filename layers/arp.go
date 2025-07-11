@@ -47,8 +47,8 @@ type ARPPacket struct {
 	// In an ARP reply this field is used to indicate the address of the host that originated the ARP request.
 	TargetMAC net.HardwareAddr
 	TargetIP  netip.Addr // Internetwork address of the intended receiver.
-	dstVendor string
-	srcVendor string
+	DstVendor string
+	SrcVendor string
 }
 
 func NewARPPacket(
@@ -75,8 +75,8 @@ func NewARPPacket(
 		SenderIP:         senderIP,
 		TargetMAC:        targetMAC,
 		TargetIP:         targetIP,
-		dstVendor:        oui.VendorWithMAC(targetMAC),
-		srcVendor:        oui.VendorWithMAC(senderMAC),
+		DstVendor:        oui.VendorWithMAC(targetMAC),
+		SrcVendor:        oui.VendorWithMAC(senderMAC),
 	}, nil
 }
 
@@ -100,10 +100,10 @@ func (ap *ARPPacket) String() string {
 		ap.Plen,
 		ap.Op,
 		ap.SenderMAC,
-		ap.srcVendor,
+		ap.SrcVendor,
 		ap.SenderIP,
 		ap.TargetMAC,
-		ap.dstVendor,
+		ap.DstVendor,
 		ap.TargetIP,
 	)
 }
@@ -175,8 +175,8 @@ func (ap *ARPPacket) UnmarshalBinary(data []byte) error {
 	if !ok {
 		return fmt.Errorf("failed parsing target IP address")
 	}
-	ap.dstVendor = oui.VendorWithMAC(ap.TargetMAC)
-	ap.srcVendor = oui.VendorWithMAC(ap.SenderMAC)
+	ap.DstVendor = oui.VendorWithMAC(ap.TargetMAC)
+	ap.SrcVendor = oui.VendorWithMAC(ap.SenderMAC)
 	return nil
 }
 
