@@ -21,7 +21,8 @@ func newTrafficiClass(tc uint8) *TrafficClass {
 		Raw:      tc,
 		DSCP:     dscpbin,
 		DSCPDesc: dscpdesc(dscpbin),
-		ECN:      tc & 3}
+		ECN:      tc & 3,
+	}
 }
 
 func (p *TrafficClass) String() string {
@@ -71,7 +72,7 @@ func (p *IPv6Packet) String() string {
 }
 
 func (p *IPv6Packet) Summary() string {
-	return fmt.Sprintf("IPv6 Packet: Src IP: %s -> Dst IP: %s", p.SrcIP, p.DstIP)
+	return fmt.Sprintf("IPv6 Packet: Src IP: %s →  Dst IP: %s", p.SrcIP, p.DstIP)
 }
 
 // Parse parses the given byte data into an IPv6 packet struct.

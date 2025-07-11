@@ -22,7 +22,8 @@ func newIPv4Flags(flags uint8) *IPv4Flags {
 	return &IPv4Flags{
 		Reserved: (flags >> 2) & 1,
 		DF:       (flags >> 1) & 1,
-		MF:       flags & 1}
+		MF:       flags & 1,
+	}
 }
 
 // Internet Protocol version 4 is described in IETF publication RFC 791.
@@ -86,7 +87,7 @@ func (p *IPv4Packet) String() string {
 }
 
 func (p *IPv4Packet) Summary() string {
-	return fmt.Sprintf("IPv4 Packet: Src IP: %s -> Dst IP: %s", p.SrcIP, p.DstIP)
+	return fmt.Sprintf("IPv4 Packet: Src IP: %s →  Dst IP: %s", p.SrcIP, p.DstIP)
 }
 
 // Parse parses the given byte data into an IPv4 packet struct.

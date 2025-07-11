@@ -63,7 +63,7 @@ func (ef *EthernetFrame) String() string {
 }
 
 func (ef *EthernetFrame) Summary() string {
-	return fmt.Sprintf("Ethernet Frame: Src MAC: %s -> Dst MAC: %s", ef.SrcMAC, ef.DstMAC)
+	return fmt.Sprintf("Ethernet Frame: Src MAC: %s →  Dst MAC: %s", ef.SrcMAC, ef.DstMAC)
 }
 
 func (ef *EthernetFrame) MarshalBinary() ([]byte, error) {

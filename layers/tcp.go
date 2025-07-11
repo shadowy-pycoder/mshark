@@ -99,7 +99,14 @@ func (t *TCPSegment) String() string {
 }
 
 func (t *TCPSegment) Summary() string {
-	return fmt.Sprintf("TCP Segment: Src Port: %d -> Dst Port: %d %s Len: %d", t.SrcPort, t.DstPort, t.Flags, len(t.payload))
+	return fmt.Sprintf(
+		"TCP Segment: Src Port: %d →  Dst Port: %d [%s] Win: %d Len: %d",
+		t.SrcPort,
+		t.DstPort,
+		t.Flags,
+		t.WindowSize,
+		len(t.payload),
+	)
 }
 
 // Parse parses the given byte data into a TCPSegment struct.
