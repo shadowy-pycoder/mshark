@@ -1,3 +1,4 @@
+// Package mpcapng implements PCAP Next Generation (pcapng) Capture File Format
 package mpcapng
 
 import (
@@ -28,11 +29,11 @@ const (
 	ifNameCode      uint16 = 0x0002
 	ifDescCode      uint16 = 0x0003
 	ifMACCode       uint16 = 0x0006
-	ifTsResCode     uint16 = 0x0009
+	ifTSResCode     uint16 = 0x0009
 	ifFilterCode    uint16 = 0x000b
 	ifOSCode        uint16 = 0x000c
 	epbBlockType    uint32 = 0x00000006
-	interfaceId     uint32 = 0x00000000 // only support one IDB
+	interfaceID     uint32 = 0x00000000 // only support one IDB
 )
 
 var (
@@ -223,7 +224,7 @@ func (pw *Writer) writeIdbOptions(in *net.Interface, expr string) ([]byte, error
 		binary.Write(buf, nativeEndian, in.HardwareAddr)
 	}
 	buf.Write(bytes.Repeat(zero, 2))
-	binary.Write(buf, nativeEndian, ifTsResCode)
+	binary.Write(buf, nativeEndian, ifTSResCode)
 	binary.Write(buf, nativeEndian, uint16(1))
 	binary.Write(buf, nativeEndian, timeRes)
 	buf.Write(bytes.Repeat(zero, 3))
@@ -248,7 +249,7 @@ func (pw *Writer) WritePacket(timestamp time.Time, data []byte) error {
 	blockLen := 4 + 4 + 4 + 4 + 4 + 4 + 4 + packetLen + 4
 	binary.Write(pw.w, nativeEndian, epbBlockType)
 	binary.Write(pw.w, nativeEndian, uint32(blockLen))
-	binary.Write(pw.w, nativeEndian, interfaceId)
+	binary.Write(pw.w, nativeEndian, interfaceID)
 	msecs := uint64(timestamp.UnixMilli())
 	binary.Write(pw.w, nativeEndian, uint32(msecs>>32))
 	binary.Write(pw.w, nativeEndian, uint32(msecs&(1<<32-1)))

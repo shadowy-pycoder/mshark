@@ -60,12 +60,13 @@ func TestParseARP(t *testing.T) {
 		ProtocolTypeDesc: "IPv4",
 		Hlen:             0x06,
 		Plen:             0x04,
-		Op:               0x0001,
-		OpDesc:           "request",
+		Op:               &ARPOperation{Val: 1, Desc: "request"},
 		SenderMAC:        net.HardwareAddr{0x7b, 0x13, 0x0b, 0x87, 0xea, 0x51},
 		SenderIP:         netip.AddrFrom4([4]byte{0x7F, 0x00, 0x00, 0x01}),
 		TargetMAC:        net.HardwareAddr{0x43, 0x40, 0x8d, 0x28, 0xca, 0x0b},
 		TargetIP:         netip.AddrFrom4([4]byte{0x7F, 0x00, 0x00, 0x02}),
+		DstVendor:        net.HardwareAddr{0x43, 0x40, 0x8d, 0x28, 0xca, 0x0b}.String(),
+		SrcVendor:        net.HardwareAddr{0x7b, 0x13, 0x0b, 0x87, 0xea, 0x51}.String(),
 	}
 	arp := &ARPPacket{}
 	packet, close := testPacket(t, "arp")

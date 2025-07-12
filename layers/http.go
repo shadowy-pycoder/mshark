@@ -42,17 +42,23 @@ func (h *HTTPMessage) String() string {
 func (h *HTTPMessage) Summary() string {
 	m := fmt.Sprintf("HTTP Message: %s", contdata)
 	if h.Request != nil {
-		m = fmt.Sprintf("HTTP Request: %s %s%s%s %s Content-Length: %d",
-			h.Request.Method, h.Request.Host, h.Request.URL.Path, h.Request.URL.RawQuery, h.Request.Proto, h.Request.ContentLength)
+		m = fmt.Sprintf(
+			"HTTP Request: %s %s%s%s %s Content-Length: %d",
+			h.Request.Method,
+			h.Request.Host,
+			h.Request.URL.Path,
+			h.Request.URL.RawQuery,
+			h.Request.Proto,
+			h.Request.ContentLength,
+		)
 	} else if h.Response != nil {
 		m = fmt.Sprintf("HTTP Response: %s %s Content-Length: %d",
 			h.Response.Proto, h.Response.Status, h.Response.ContentLength)
 	}
-	return fmt.Sprintf("%s", m)
+	return m
 }
 
 func (h *HTTPMessage) Parse(data []byte) error {
-
 	if !bytes.Contains(data, protohttp10) && !bytes.Contains(data, protohttp11) {
 		h.Request = nil
 		h.Response = nil
@@ -119,7 +125,8 @@ func (h *HTTPMessage) MarshalJSON() ([]byte, error) {
 			Proto:         h.Response.Proto,
 			Status:        h.Response.Status,
 			ContentLength: int(h.Response.ContentLength),
-			Header:        h.Response.Header}})
+			Header:        h.Response.Header,
+		}})
 	}
 	return nil, fmt.Errorf("both request and response are empty")
 }

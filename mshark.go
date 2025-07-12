@@ -1,3 +1,4 @@
+// Package mshark is a simple packet capture tool
 package mshark
 
 import (
@@ -6,6 +7,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/signal"
 	"time"
 
 	"github.com/mdlayher/packet"
@@ -31,12 +33,13 @@ type PacketWriter interface {
 }
 
 type Config struct {
-	Device      *net.Interface // The name of the network interface ("any" means listen on all interfaces).
-	Snaplen     int            // The maximum length of each packet snapshot.
-	Promisc     bool           // Promiscuous mode. This setting is ignored for "any" interface.
-	Timeout     time.Duration  // The maximum duration of the packet capture process.
-	PacketCount int            // The maximum number of packets to capture.
-	Expr        string         // BPF filter expression.
+	Device       *net.Interface // The name of the network interface ("any" means listen on all interfaces).
+	Snaplen      int            // The maximum length of each packet snapshot.
+	Promisc      bool           // Promiscuous mode. This setting is ignored for "any" interface.
+	Timeout      time.Duration  // The maximum duration of the packet capture process.
+	PacketCount  int            // The maximum number of packets to capture.
+	PacketBuffer int            // The maximum size for packet buffer (Default: 8192)
+	Expr         string         // BPF filter expression.
 }
 
 type Writer struct {
@@ -111,6 +114,7 @@ func (mw *Writer) WritePacket(timestamp time.Time, data []byte) error {
 //   - Promiscuous Mode: true
 //   - Timeout: 5s
 //   - Number of Packets: 0
+//   - Packet Buffer Size: 8192
 //   - BPF Filter: "ip proto tcp"
 //   - Verbose: true
 func (mw *Writer) WriteHeader(c *Config) error {
@@ -119,6 +123,7 @@ func (mw *Writer) WriteHeader(c *Config) error {
 - Promiscuous Mode: %v
 - Timeout: %s
 - Number of Packets: %d
+- Packet Buffer Size: %d
 - BPF Filter: %q
 - Verbose: %v
 
@@ -128,6 +133,7 @@ func (mw *Writer) WriteHeader(c *Config) error {
 		c.Device.Name != "any" && c.Promisc,
 		c.Timeout,
 		c.PacketCount,
+		c.PacketBuffer,
 		c.Expr,
 		mw.verbose,
 	)
@@ -202,6 +208,8 @@ func OpenLive(conf *Config, pw ...PacketWriter) error {
 		}
 	}
 
+	done := make(chan bool)
+
 	defer func() {
 		stats, err := c.Stats()
 		if err != nil {
@@ -210,36 +218,67 @@ func OpenLive(conf *Config, pw ...PacketWriter) error {
 			fmt.Printf("- Packets: %d, Drops: %d, Freeze Queue Count: %d\n",
 				stats.Packets, stats.Drops, stats.FreezeQueueCount)
 			for _, w := range pw {
-				if w, ok := w.(*Writer); ok {
+				if w, ok := w.(*Writer); ok && w.w == os.Stdout {
 					fmt.Fprintf(w.w, "- Packets Captured: %d\n", w.packets)
+					break
 				}
 			}
 		}
 		// close Conn
-		c.Close()
+		err = c.Close()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed closing connection: %v", err)
+		}
+	}()
+
+	go func() {
+		quit := make(chan os.Signal, 1)
+		signal.Notify(quit, os.Interrupt)
+		<-quit
+		close(done)
 	}()
 
 	// number of packets
-	count := conf.PacketCount
-	if count < 0 {
-		count = 0
-	}
+	count := max(0, conf.PacketCount)
 	infinity := count == 0
 
 	b := make([]byte, conf.Snaplen)
+	if conf.PacketBuffer <= 0 {
+		conf.PacketBuffer = 8192
+	}
+	packetQueue := make(chan []byte, conf.PacketBuffer)
+
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			case packet, ok := <-packetQueue:
+				if !ok {
+					return
+				}
+				for _, w := range pw {
+					w.WritePacket(time.Now().UTC(), packet)
+				}
+			}
+		}
+	}()
 
 	for i := 0; infinity || i < count; i++ {
-		n, _, err := c.ReadFrom(b)
-		if err != nil {
-			if errors.Is(err, os.ErrDeadlineExceeded) {
-				return nil
+		select {
+		case <-done:
+			close(packetQueue)
+			return nil
+		default:
+			n, _, err := c.ReadFrom(b)
+			if err != nil {
+				if errors.Is(err, os.ErrDeadlineExceeded) {
+					return nil
+				}
+				return fmt.Errorf("failed to read Ethernet frame: %v", err)
 			}
-			return fmt.Errorf("failed to read Ethernet frame: %v", err)
-		}
-		for _, w := range pw {
-			if err := w.WritePacket(time.Now().UTC(), b[:n]); err != nil && !errors.Is(err, layers.TLSTooShortErr) {
-				return err
-			}
+			p := append([]byte(nil), b[:n]...)
+			packetQueue <- p
 		}
 	}
 	return nil

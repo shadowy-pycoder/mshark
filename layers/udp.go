@@ -34,7 +34,7 @@ func (u *UDPSegment) String() string {
 }
 
 func (u *UDPSegment) Summary() string {
-	return fmt.Sprintf("UDP Segment: Src Port: %d -> Dst Port: %d Len: %d", u.SrcPort, u.DstPort, len(u.payload))
+	return fmt.Sprintf("UDP Segment: Src Port: %d →  Dst Port: %d Len: %d", u.SrcPort, u.DstPort, len(u.payload))
 }
 
 // Parse parses the given byte data into a UDPSegment struct.

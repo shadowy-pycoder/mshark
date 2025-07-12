@@ -15,15 +15,15 @@ const (
 	ServerHelloTLSVal = 0x02
 )
 
-var TLSTooShortErr = fmt.Errorf("tls message too short")
+var ErrTLSTooShort = fmt.Errorf("tls message too short")
 
 type TLSVersion struct {
-	Value uint16
-	Desc  string
+	Val  uint16
+	Desc string
 }
 
 func (tv *TLSVersion) String() string {
-	return fmt.Sprintf("%s (%#04x)", tv.Desc, tv.Value)
+	return fmt.Sprintf("%s (%#04x)", tv.Desc, tv.Val)
 }
 
 type Record struct {
@@ -219,7 +219,7 @@ func (tch *TLSClientHello) ParseHS(data []byte) error {
 		return nil
 	}
 	ver := binary.BigEndian.Uint16(data[4:6]) // 9 - 10 bytes data[4:6]
-	tch.Version = &TLSVersion{Value: ver, Desc: verdesc(ver)}
+	tch.Version = &TLSVersion{Val: ver, Desc: verdesc(ver)}
 	if len(data) < 38 {
 		return nil
 	}
@@ -411,7 +411,7 @@ func (tsh *TLSServerHello) ParseHS(data []byte) error {
 		return nil
 	}
 	ver := binary.BigEndian.Uint16(data[4:6]) // 9 - 10 bytes data[4:6]
-	tsh.Version = &TLSVersion{Value: ver, Desc: verdesc(ver)}
+	tsh.Version = &TLSVersion{Val: ver, Desc: verdesc(ver)}
 	if len(data) < 38 {
 		return nil
 	}
@@ -453,7 +453,7 @@ func (tsh *TLSServerHello) ParseHS(data []byte) error {
 				return nil
 			}
 			ver := binary.BigEndian.Uint16(data[i+4 : i+6])
-			tsh.SupportedVersion = &TLSVersion{Value: ver, Desc: verdesc(ver)}
+			tsh.SupportedVersion = &TLSVersion{Val: ver, Desc: verdesc(ver)}
 		}
 		i += length + 4
 	}
@@ -483,6 +483,9 @@ func (t *TLSMessage) Summary() string {
 		sb.WriteString(fmt.Sprintf("Ignored unknown record Len: %d", len(t.Data)))
 	} else {
 		for i, rec := range t.Records {
+			if sb.Len() > maxLenSummary {
+				return sb.String()[:maxLenSummary] + string(ellipsis)
+			}
 			if i > 0 {
 				sb.WriteString(fmt.Sprintf("%s (%d) Len: %d ", rec.ContentTypeDesc, rec.ContentType, rec.Length))
 				continue
@@ -497,9 +500,6 @@ func (t *TLSMessage) Summary() string {
 				rec.ContentTypeDesc,
 				rec.ContentType,
 				rec.Length))
-			if sb.Len() > maxLenSummary {
-				return sb.String()[:maxLenSummary] + string(ellipsis)
-			}
 		}
 	}
 	return sb.String()
@@ -541,7 +541,7 @@ func (t *TLSMessage) printRecords() string {
 func (t *TLSMessage) Parse(data []byte) error {
 	t.Records = make([]*Record, 0, 5)
 	if len(data) < headerSizeTLS {
-		return TLSTooShortErr
+		return ErrTLSTooShort
 	}
 	for len(data) > 0 {
 		ctype := data[0]
@@ -549,20 +549,26 @@ func (t *TLSMessage) Parse(data []byte) error {
 		if ctdesc == "Unknown" {
 			break
 		}
+		if len(data) < 3 {
+			break
+		}
 		ver := binary.BigEndian.Uint16(data[1:3])
 		verdesc := verdesc(ver)
 		if verdesc == "Unknown" {
 			break
 		}
+		if len(data) < headerSizeTLS {
+			break
+		}
 		rlen := binary.BigEndian.Uint16(data[3:headerSizeTLS])
-		rb := uint16(headerSizeTLS + rlen)
-		if rb > uint16(len(data)) {
-			rb = uint16(len(data))
+		rb := min(uint16(headerSizeTLS+rlen), uint16(len(data)))
+		if rb < headerSizeTLS {
+			break
 		}
 		r := &Record{
 			ContentType:     ctype,
 			ContentTypeDesc: ctdesc,
-			Version:         &TLSVersion{Value: ver, Desc: verdesc},
+			Version:         &TLSVersion{Val: ver, Desc: verdesc},
 			Length:          rlen,
 			Data:            data[headerSizeTLS:rb],
 		}

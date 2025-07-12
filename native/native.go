@@ -1,3 +1,4 @@
+// Package native determines host machine endianness
 package native
 
 import (
