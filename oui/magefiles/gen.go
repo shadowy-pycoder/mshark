@@ -37,6 +37,12 @@ var vendors = []string{
 {{- end }}
 }
 
+var vendorsFull = []string{
+{{- range .VendorsFull }}
+"{{ . }}",
+{{- end }}
+}
+
 `
 var caser = cases.Title(language.English)
 
@@ -150,8 +156,9 @@ var terms = []string{
 var pattern = regexp.MustCompile(`(?i)\b(?:` + strings.Join(terms, "|") + `)`)
 
 type templateData struct {
-	Entries []entry
-	Vendors []string
+	Entries     []entry
+	Vendors     []string
+	VendorsFull []string
 }
 
 type OUI string
@@ -287,8 +294,9 @@ func generate(src, dst string) error {
 
 func newTemplateData(r io.Reader) *templateData {
 	var (
-		entries []entry
-		vendors []string
+		entries     []entry
+		vendors     []string
+		vendorsFull []string
 	)
 
 	ouiMap := make(map[string]string)
@@ -315,6 +323,11 @@ func newTemplateData(r io.Reader) *templateData {
 		o := strings.ToLower(record[1])
 
 		v := strings.TrimSpace(record[2])
+		vf := strings.Join(strings.Fields(v), " ")
+		vf = strings.ReplaceAll(vf, `"`, "")
+		if IsUpper(v) {
+			vf = caser.String(vf)
+		}
 		v = pattern.ReplaceAllString(v, "")
 		v = sr.Replace(v)
 		v = strings.Join(strings.Fields(v), " ")
@@ -332,6 +345,7 @@ func newTemplateData(r io.Reader) *templateData {
 
 		if _, ok := vendorMap[v]; !ok {
 			vendors = append(vendors, v)
+			vendorsFull = append(vendorsFull, vf)
 			vendorMap[v] = id
 			id++
 		}
@@ -346,6 +360,7 @@ func newTemplateData(r io.Reader) *templateData {
 		ouiMap[k] = v
 		if _, ok := vendorMap[v]; !ok {
 			vendors = append(vendors, v)
+			vendorsFull = append(vendorsFull, v)
 			vendorMap[v] = id
 			id++
 		}
@@ -357,7 +372,8 @@ func newTemplateData(r io.Reader) *templateData {
 	})
 
 	return &templateData{
-		Entries: entries,
-		Vendors: vendors,
+		Entries:     entries,
+		Vendors:     vendors,
+		VendorsFull: vendorsFull,
 	}
 }
