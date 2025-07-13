@@ -4,6 +4,7 @@ package oui
 import (
 	"bytes"
 	"net"
+	"strconv"
 	"strings"
 )
 
@@ -12,8 +13,17 @@ var (
 	LocalhostMAC = net.HardwareAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 )
 
+func outMulticastRange(hw string) bool {
+	s := strings.ReplaceAll(hw[9:], ":", "")
+	n, err := strconv.ParseInt(s, 16, 64)
+	if err != nil || n > 0x7fffff {
+		return true
+	}
+	return false
+}
+
 //go:generate mage -v build
-func Vendor(s string) string {
+func Vendor(s string, full bool) string {
 	s = strings.ReplaceAll(s, ":", "")
 	switch {
 	case len(s) < 6:
@@ -29,15 +39,24 @@ func Vendor(s string) string {
 	if id > len(vendors) {
 		return ""
 	}
+	if full {
+		return vendorsFull[id]
+	}
 	return vendors[id]
 }
 
-// VendorFromMAC returns the hardware vendor of a net.HardwareAddr.
+// VendorFromMAC returns the hardware vendor (full name) of a net.HardwareAddr.
 func VendorFromMAC(hw net.HardwareAddr) string {
-	return Vendor(hw.String())
+	vendor := Vendor(hw.String(), true)
+	if vendor == "IPv4 Multicast" && outMulticastRange(hw.String()) {
+		return ""
+	}
+	return vendor
 }
 
-// VendorWithMAC concatenates vendor with MAC address (e.g. Next_01:02:03)
+// VendorWithMAC concatenates vendor with MAC address (e.g. Next_01:02:03).
+//
+// If vendor is not found returns MAC address
 func VendorWithMAC(hw net.HardwareAddr) string {
 	if bytes.Equal(BroadcastMAC, hw) {
 		return "Broadcast_" + hw.String()[9:]
@@ -45,8 +64,11 @@ func VendorWithMAC(hw net.HardwareAddr) string {
 	if bytes.Equal(LocalhostMAC, hw) {
 		return "Localhost_" + hw.String()[9:]
 	}
-	vendor := Vendor(hw.String())
+	vendor := Vendor(hw.String(), false)
 	if vendor != "" {
+		if vendor == "IPv4 Multicast" && outMulticastRange(hw.String()) {
+			return hw.String()
+		}
 		vendor = strings.ReplaceAll(vendor, " ", "_")
 		return vendor + "_" + hw.String()[9:]
 	}
