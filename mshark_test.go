@@ -3,11 +3,13 @@ package mshark
 import (
 	"io"
 	"testing"
+
+	"github.com/shadowy-pycoder/mshark/network"
 )
 
 func BenchmarkOpenLive(b *testing.B) {
 	b.ResetTimer()
-	in, err := InterfaceByName("any")
+	in, err := network.InterfaceByName("any")
 	if err != nil {
 		b.Fatal(err)
 	}

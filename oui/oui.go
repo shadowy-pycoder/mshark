@@ -10,7 +10,7 @@ import (
 
 var (
 	BroadcastMAC = net.HardwareAddr{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
-	LocalhostMAC = net.HardwareAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+	LoopbackMAC  = net.HardwareAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 )
 
 func outMulticastRange(hw string) bool {
@@ -61,8 +61,8 @@ func VendorWithMAC(hw net.HardwareAddr) string {
 	if bytes.Equal(BroadcastMAC, hw) {
 		return "Broadcast_" + hw.String()[9:]
 	}
-	if bytes.Equal(LocalhostMAC, hw) {
-		return "Localhost_" + hw.String()[9:]
+	if bytes.Equal(LoopbackMAC, hw) {
+		return "Loopback_" + hw.String()[9:]
 	}
 	vendor := Vendor(hw.String(), false)
 	if vendor != "" {

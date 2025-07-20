@@ -10819,10 +10819,10 @@ var ouis = map[string]int{
 	"0050fe": 3595,  // PCTVnet ASA
 	"0050ff": 7577,  // Hakko Electronics
 	"0051ed": 276,   // LG Innotek
-	"005200": 19244, // PacketPWEthA
-	"005201": 19251, // PacketPWEthB
-	"005202": 19247, // BFD for VXLAN
-	"005213": 19250, // Proxy Mobile IPv6
+	"005200": 19250, // PacketPWEthA
+	"005201": 19244, // PacketPWEthB
+	"005202": 19246, // BFD for VXLAN
+	"005213": 19245, // Proxy Mobile IPv6
 	"005218": 993,   // Wuxi Keboda Electron
 	"005245": 11905, // Ganatechwin
 	"0052c2": 624,   // peiker acustic
@@ -13279,7 +13279,7 @@ var ouis = map[string]int{
 	"00fd45": 4175,  // Hewlett Packard Enterprise
 	"00fd4c": 5546,  // Nevatec
 	"00fec8": 4,     // Cisco
-	"01005e": 19249, // IPv4 Multicast
+	"01005e": 19251, // IPv4 Multicast
 	"020701": 7844,  // Racal Datacom
 	"021c7c": 11634, // Perq
 	"026086": 3914,  // Logic Replacement Tech
@@ -27349,13 +27349,13 @@ var ouis = map[string]int{
 	"8cfe57": 48,    // Apple
 	"8cfe74": 263,   // Ruckus Wireless
 	"8cfeb4": 4900,  // Vsoontech Electronics
-	"900000": 19242, // MPLS TP p2p
-	"900001": 19246, // BFD on LAG Interfaces
-	"900002": 19248, // AllL1MI ISs
-	"900003": 19243, // AllL2MI ISs
+	"900000": 19248, // MPLS TP p2p
+	"900001": 19247, // BFD on LAG Interfaces
+	"900002": 19242, // AllL1MI ISs
+	"900003": 19249, // AllL2MI ISs
 	"90004e": 860,   // Hon Hai Precision Ind
 	"9000db": 85,    // Samsung Electronics
-	"900100": 19245, // TRILL OAM
+	"900100": 19243, // TRILL OAM
 	"900117": 15,    // Huawei Technologies
 	"90013b": 3,     // Sagemcom Broadband SAS
 	"900218": 309,   // Sky Uk
@@ -57708,16 +57708,16 @@ var vendors = []string{
 	"Công ty Cổ phần Thiết bị Công nghiệp GEIC",
 	"Documentation",
 	"IPv6 Multicast",
+	"AllL1MI ISs",
+	"TRILL OAM",
+	"PacketPWEthB",
+	"Proxy Mobile IPv6",
+	"BFD for VXLAN",
+	"BFD on LAG Interfaces",
 	"MPLS TP p2p",
 	"AllL2MI ISs",
 	"PacketPWEthA",
-	"TRILL OAM",
-	"BFD on LAG Interfaces",
-	"BFD for VXLAN",
-	"AllL1MI ISs",
 	"IPv4 Multicast",
-	"Proxy Mobile IPv6",
-	"PacketPWEthB",
 }
 
 var vendorsFull = []string{
@@ -76963,14 +76963,14 @@ var vendorsFull = []string{
 	"Công ty Cổ phần Thiết bị Công nghiệp GEIC",
 	"Documentation",
 	"IPv6 Multicast",
+	"AllL1MI ISs",
+	"TRILL OAM",
+	"PacketPWEthB",
+	"Proxy Mobile IPv6",
+	"BFD for VXLAN",
+	"BFD on LAG Interfaces",
 	"MPLS TP p2p",
 	"AllL2MI ISs",
 	"PacketPWEthA",
-	"TRILL OAM",
-	"BFD on LAG Interfaces",
-	"BFD for VXLAN",
-	"AllL1MI ISs",
 	"IPv4 Multicast",
-	"Proxy Mobile IPv6",
-	"PacketPWEthB",
 }
