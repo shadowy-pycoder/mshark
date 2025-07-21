@@ -20,6 +20,7 @@ var (
 	ipPortPattern = regexp.MustCompile(
 		`\b(?:\d{1,3}\.){3}\d{1,3}(?::(6553[0-5]|655[0-2]\d|65[0-4]\d{2}|6[0-4]\d{3}|[1-5]?\d{1,4}))?\b`,
 	)
+	macPattern = regexp.MustCompile(`(?i)([a-z0-9_]+_[0-9a-f]{2}(?::[0-9a-f]{2}){2}|(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2})`)
 )
 
 func root(args []string) error {
@@ -35,6 +36,7 @@ func root(args []string) error {
 	flags.StringVar(&conf.Interface, "i", "", "The name of the network interface. Example: eth0 (Default: default interface)")
 	flags.BoolVar(&conf.FullDuplex, "f", false, "Run ARP spoofing in fullduplex mode")
 	flags.BoolVar(&conf.Debug, "d", false, "Enable debug logging")
+	nocolor := flags.Bool("nocolor", false, "Disable colored output")
 	flags.BoolFunc("I", "Display list of interfaces and exit.", func(flagValue string) error {
 		if err := network.DisplayInterfaces(); err != nil {
 			fmt.Fprintf(os.Stderr, "%s: %v\n", app, err)
@@ -53,9 +55,12 @@ func root(args []string) error {
 		}
 		conf.Gateway = &ip
 	}
-	output := zerolog.ConsoleWriter{Out: os.Stdout, NoColor: false}
+	output := zerolog.ConsoleWriter{Out: os.Stdout, NoColor: *nocolor}
 	output.FormatTimestamp = func(i any) string {
 		ts, _ := time.Parse(time.RFC3339, i.(string))
+		if *nocolor {
+			return colors.WrapBrackets(ts.Format(time.TimeOnly))
+		}
 		return colors.Gray(colors.WrapBrackets(ts.Format(time.TimeOnly))).String()
 	}
 	output.FormatMessage = func(i any) string {
@@ -63,8 +68,14 @@ func root(args []string) error {
 			return ""
 		}
 		s := i.(string)
+		if *nocolor {
+			return s
+		}
 		result := ipPortPattern.ReplaceAllStringFunc(s, func(match string) string {
 			return colors.Gray(match).String()
+		})
+		result = macPattern.ReplaceAllStringFunc(result, func(match string) string {
+			return colors.Yellow(match).String()
 		})
 		return result
 	}

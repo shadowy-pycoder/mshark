@@ -394,7 +394,7 @@ func (ar *ARPSpoofer) spoofTargets() {
 			if err != nil {
 				continue
 			}
-			ar.logger.Debug().Msgf("[arp spoofer] Sending %d bytes of ARP packet to %s (%s)", len(ap.data), targetIP, oui.VendorWithMAC(targetMAC))
+			ar.logger.Debug().Msgf("[arp spoofer] Sending %dB of ARP packet to %s (%s)", len(ap.data), targetIP, oui.VendorWithMAC(targetMAC))
 			ar.packets <- ap
 		}
 		if ar.fullduplex {
