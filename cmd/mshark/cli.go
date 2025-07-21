@@ -3,17 +3,16 @@ package main
 import (
 	"flag"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	ms "github.com/shadowy-pycoder/mshark"
 	"github.com/shadowy-pycoder/mshark/mpcap"
 	"github.com/shadowy-pycoder/mshark/mpcapng"
+	"github.com/shadowy-pycoder/mshark/network"
 )
 
 const app string = "mshark"
@@ -62,21 +61,6 @@ func (f *ExtFlag) UnmarshalText(b []byte) error {
 	return nil
 }
 
-func displayInterfaces() error {
-	w := new(tabwriter.Writer)
-	w.Init(os.Stdout, 0, 0, 2, ' ', tabwriter.TabIndent)
-	ifaces, err := net.Interfaces()
-	if err != nil {
-		return fmt.Errorf("failed to get network interfaces: %v", err)
-	}
-	fmt.Fprintln(w, "Index\tName\tFlags")
-	fmt.Fprintln(w, "0\tany\tUP")
-	for _, iface := range ifaces {
-		fmt.Fprintf(w, "%d\t%s\t%s\n", iface.Index, iface.Name, strings.ToUpper(iface.Flags.String()))
-	}
-	return w.Flush()
-}
-
 func createFile(app, ext string) (*os.File, error) {
 	path := fmt.Sprintf("./%s_%s.%s", app, time.Now().UTC().Format("20060102_150405"), ext)
 	f, err := os.OpenFile(filepath.FromSlash(path), os.O_CREATE|os.O_WRONLY, 0o644)
@@ -105,7 +89,7 @@ func root(args []string) error {
 	packetBuffer := flags.Int("b", 8192, "The maximum size of packet queue.")
 	flags.StringVar(&conf.Expr, "e", "", `BPF filter expression. Example: "ip proto tcp".`)
 	flags.BoolFunc("D", "Display list of interfaces and exit.", func(flagValue string) error {
-		if err := displayInterfaces(); err != nil {
+		if err := network.DisplayInterfaces(); err != nil {
 			fmt.Fprintf(os.Stderr, "%s: %v\n", app, err)
 			os.Exit(2)
 		}
@@ -130,7 +114,7 @@ func root(args []string) error {
 	}
 
 	// getting network interface from the provided name
-	in, err := ms.InterfaceByName(*iface)
+	in, err := network.InterfaceByName(*iface)
 	if err != nil {
 		return err
 	}

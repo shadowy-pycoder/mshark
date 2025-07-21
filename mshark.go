@@ -140,31 +140,6 @@ func (mw *Writer) WriteHeader(c *Config) error {
 	return err
 }
 
-// InterfaceByName returns the interface specified by name.
-func InterfaceByName(name string) (*net.Interface, error) {
-	var (
-		in  *net.Interface
-		err error
-	)
-	if name == "any" {
-		in = &net.Interface{Index: 0, Name: "any"}
-	} else {
-		in, err = net.InterfaceByName(name)
-		if err != nil {
-			return nil, fmt.Errorf("unknown interface %s: %v", name, err)
-		}
-		ok := true &&
-			// Look for an Ethernet interface.
-			len(in.HardwareAddr) == 6 &&
-			// Look for up, multicast, broadcast.
-			in.Flags&(net.FlagUp|net.FlagMulticast|net.FlagBroadcast) != 0
-		if !ok {
-			return nil, fmt.Errorf("interface %s is not up", name)
-		}
-	}
-	return in, nil
-}
-
 // OpenLive opens a live capture based on the given configuration and writes
 // all captured packets to the given PacketWriters.
 func OpenLive(conf *Config, pw ...PacketWriter) error {
