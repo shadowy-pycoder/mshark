@@ -242,13 +242,18 @@ func NewARPSpoofer(conf *ARPSpoofConfig) (*ARPSpoofer, error) {
 		return nil, fmt.Errorf("failed to listen: %v", err)
 	}
 	// setting up logger
-	zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	if conf.Debug {
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	}
 	if conf.Logger != nil {
-		arpspoofer.logger = conf.Logger
+		lvl := zerolog.InfoLevel
+		if conf.Debug {
+			lvl = zerolog.DebugLevel
+		}
+		logger := conf.Logger.Level(lvl)
+		arpspoofer.logger = &logger
 	} else {
+		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+		if conf.Debug {
+			zerolog.SetGlobalLevel(zerolog.DebugLevel)
+		}
 		logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
 		arpspoofer.logger = &logger
 	}
