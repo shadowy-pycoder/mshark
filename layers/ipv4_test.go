@@ -29,15 +29,14 @@ func TestParseIPv4(t *testing.T) {
 		ECN:            0,
 		TotalLength:    52,
 		Identification: 47117,
-		Flags:          &IPv4Flags{Reserved: 0, MF: 0, DF: 1},
+		Flags:          &IPv4Flags{Raw: 2, Reserved: 0, DF: 1, MF: 0},
 		FragmentOffset: 0,
 		TTL:            64,
-		Protocol:       6,
-		ProtocolDesc:   "TCP",
+		Protocol:       &IPv4Proto{Val: 6, Desc: "TCP"},
 		HeaderChecksum: 33972,
 		SrcIP:          netip.AddrFrom4([4]byte{0x7F, 0x00, 0x00, 0x01}),
 		DstIP:          netip.AddrFrom4([4]byte{0x7F, 0x00, 0x00, 0x02}),
-		payload:        []byte{},
+		Payload:        []byte{},
 	}
 	ip := &IPv4Packet{}
 	packet, close := testPacket(t, "ipv4")

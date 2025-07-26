@@ -12,6 +12,11 @@ import (
 	"text/tabwriter"
 )
 
+var (
+	BroadcastMAC = net.HardwareAddr{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
+	LoopbackMAC  = net.HardwareAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+)
+
 // InterfaceByName returns the interface specified by name.
 func InterfaceByName(name string) (*net.Interface, error) {
 	var (
@@ -65,6 +70,9 @@ func GetDefaultInterface() (*net.Interface, error) {
 		line := scanner.Text()
 		fields := strings.Fields(line)
 		if len(fields) >= 2 && fields[1] == "00000000" {
+			if strings.Contains(fields[0], "tun") {
+				continue
+			}
 			defaultInterface = fields[0]
 			break
 		}
@@ -73,23 +81,35 @@ func GetDefaultInterface() (*net.Interface, error) {
 }
 
 func GetDefaultGatewayIPv4() (netip.Addr, error) {
-	cmd := exec.Command("sh", "-c", "ip route show 0.0.0.0/0 | awk '{print $3}'")
-	ipRaw, err := cmd.Output()
+	cmd := exec.Command("sh", "-c", `ip -4 route show 0.0.0.0/0 | awk '{print $3 " " $5}'`)
+	ipdevRaw, err := cmd.Output()
 	if err != nil {
 		return netip.Addr{}, err
 	}
-	ip, err := netip.ParseAddr(strings.TrimRight(string(ipRaw), "\n"))
-	if err != nil {
-		return netip.Addr{}, err
+	for line := range strings.SplitSeq(strings.TrimRight(string(ipdevRaw), "\n"), "\n") {
+		ipdev := strings.Fields(line)
+		if len(ipdev) < 2 {
+			continue
+		}
+		ipstr := ipdev[0]
+		dev := ipdev[1]
+		if strings.Contains(dev, "tun") {
+			continue
+		}
+		ip, err := netip.ParseAddr(ipstr)
+		if err != nil {
+			continue
+		}
+		if !ip.IsValid() || !ip.Is4() {
+			continue
+		}
+		return ip, nil
 	}
-	if !ip.Is4() {
-		return netip.Addr{}, fmt.Errorf("only IPv4 is supported")
-	}
-	return ip, nil
+	return netip.Addr{}, fmt.Errorf("gateway IPv4 not found ")
 }
 
 func GetGatewayIPv4FromInterface(iface string) (netip.Addr, error) {
-	cmd := exec.Command("sh", "-c", fmt.Sprintf("ip route show dev %s", iface))
+	cmd := exec.Command("sh", "-c", fmt.Sprintf("ip -4 route show dev %s", iface))
 	routes, err := cmd.Output()
 	if err != nil {
 		return netip.Addr{}, err

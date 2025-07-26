@@ -59,3 +59,9 @@ func joinBytes(bs ...[]byte) []byte {
 	}
 	return b
 }
+
+func add16WithCarryWrapAround(x, y uint16) uint16 {
+	sum32 := uint32(x) + uint32(y)
+	sum32 = (sum32 & 0xFFFF) + (sum32 >> 16)
+	return uint16(sum32)
+}

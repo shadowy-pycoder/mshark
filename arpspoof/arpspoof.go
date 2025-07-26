@@ -87,7 +87,7 @@ func (at *ARPTable) Delete(ip netip.Addr) {
 func (at *ARPTable) Refresh() error {
 	at.Lock()
 	defer at.Unlock()
-	cmd := exec.Command("sh", "-c", "ip -br neigh")
+	cmd := exec.Command("sh", "-c", "ip -4 -br neigh")
 	out, err := cmd.Output()
 	if err != nil {
 		return err
@@ -175,7 +175,7 @@ func NewARPSpoofer(conf *ARPSpoofConfig) (*ARPSpoofer, error) {
 		arpspoofer.gwIP = gwIP
 	}
 	if gwMAC, ok := arpspoofer.arpTable.Get(arpspoofer.gwIP); !ok {
-		probeIP(arpspoofer.gwIP)
+		doPing(arpspoofer.gwIP)
 		time.Sleep(probeThrottling)
 		err = arpspoofer.arpTable.Refresh()
 		if err != nil {
@@ -294,8 +294,7 @@ func (ar *ARPSpoofer) Stop() error {
 	return err
 }
 
-func doProbe(ip netip.Addr) error {
-	// TODO: add manual packet crafting
+func doPing(ip netip.Addr) error {
 	ping := exec.Command("sh", "-c", fmt.Sprintf("ping -c1 -t1 -w1 %s", ip))
 	if err := ping.Start(); err != nil {
 		return err
@@ -306,8 +305,14 @@ func doProbe(ip netip.Addr) error {
 	return nil
 }
 
-func probeIP(ip netip.Addr) error {
-	return doProbe(ip)
+func (ar *ARPSpoofer) doProbe(ip netip.Addr) error {
+	// TODO: add parsing ARP replies
+	ap, err := ar.newARPRequest(ar.hostMAC, ar.hostIP, ip)
+	if err != nil {
+		return err
+	}
+	ar.packets <- ap
+	return nil
 }
 
 func (ar *ARPSpoofer) probeTargetsOnce() {
@@ -316,7 +321,7 @@ func (ar *ARPSpoofer) probeTargetsOnce() {
 		wg.Add(1)
 		go func(ip netip.Addr) {
 			defer wg.Done()
-			doProbe(ip)
+			doPing(ip)
 		}(ip)
 		time.Sleep(probeThrottling)
 	}
@@ -338,7 +343,7 @@ func (ar *ARPSpoofer) probeTargets() {
 				wg.Add(1)
 				go func(ip netip.Addr) {
 					defer wg.Done()
-					doProbe(ip)
+					doPing(ip)
 				}(ip)
 				time.Sleep(probeThrottling)
 			}
@@ -388,6 +393,20 @@ func (ar *ARPSpoofer) newARPReply(srcMAC, dstMAC net.HardwareAddr, srcIP, dstIP 
 		return nil, err
 	}
 	return &Packet{addr: dstMAC, data: eth.ToBytes()}, nil
+}
+
+func (ar *ARPSpoofer) newARPRequest(srcMAC net.HardwareAddr, srcIP, dstIP netip.Addr) (*Packet, error) {
+	arp, err := layers.NewARPPacket(layers.OperationRequest, srcMAC, srcIP, network.LoopbackMAC, dstIP)
+	if err != nil {
+		ar.logger.Debug().Msg(err.Error())
+		return nil, err
+	}
+	eth, err := layers.NewEthernetFrame(network.BroadcastMAC, srcMAC, layers.EtherTypeARP, arp.ToBytes())
+	if err != nil {
+		ar.logger.Debug().Msg(err.Error())
+		return nil, err
+	}
+	return &Packet{addr: network.BroadcastMAC, data: eth.ToBytes()}, nil
 }
 
 func (ar *ARPSpoofer) spoofTargets() {

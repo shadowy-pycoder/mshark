@@ -252,8 +252,7 @@ func OpenLive(conf *Config, pw ...PacketWriter) error {
 				}
 				return fmt.Errorf("failed to read Ethernet frame: %v", err)
 			}
-			p := append([]byte(nil), b[:n]...)
-			packetQueue <- p
+			packetQueue <- append([]byte(nil), b[:n]...)
 		}
 	}
 	return nil

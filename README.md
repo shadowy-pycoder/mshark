@@ -31,7 +31,6 @@ sudo setcap cap_net_raw+ep ~/go/bin/mshark
 
 ```shell
 mshark -h
-
                 ______   __                            __
                /      \ |  \                          |  \
  ______ ____  |  $$$$$$\| $$____    ______    ______  | $$   __
@@ -49,22 +48,23 @@ GitHub: https://github.com/shadowy-pycoder/mshark
 Usage: mshark [OPTIONS]
 Options:
   -h    Show this help message and exit.
-  -D    Display list of interfaces and exit.
+  -D	Display list of interfaces and exit.
+  -V	Show version and build information
   -b int
-        The maximum size of packet queue. (default 8192)
+    	The maximum size of packet queue. (default 8192)
   -c int
-        The maximum number of packets to capture.
+    	The maximum number of packets to capture.
   -e string
-        BPF filter expression. Example: "ip proto tcp"
+    	BPF filter expression. Example: "ip proto tcp".
   -f value
-        File extension(s) to write captured data. Supported formats: stdout, txt, pcap, pcapng
+    	File extension(s) to write captured data. Supported formats: stdout, txt, pcap, pcapng
   -i string
-        The name of the network interface. Example: eth0 (default "any")
-  -p    Promiscuous mode. This setting is ignored for "any" interface. Defaults to false.
+    	The name of the network interface. Example: eth0 (default "any")
+  -p	Promiscuous mode. This setting is ignored for "any" interface. Defaults to false.
   -s int
-        The maximum length of each packet snapshot. Defaults to 65535.
+    	The maximum length of each packet snapshot. Defaults to 65535.
   -t duration
-        The maximum duration of the packet capture process. Example: 5s
+    	The maximum duration of the packet capture process. Example: 5s
   -v	Display full packet info when capturing to stdout or txt.
 ```
 

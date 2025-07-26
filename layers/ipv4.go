@@ -6,28 +6,50 @@ import (
 	"net/netip"
 )
 
-const headerSizeIPv4 = 20
+const (
+	headerSizeIPv4           = 20
+	headerChecksumOffsetIPv4 = 10
+)
+
+type IPProto uint8
+
+const (
+	ProtoICMP IPProto = 1
+	ProtoTCP  IPProto = 6
+	ProtoUDP  IPProto = 17
+)
+
+type IPv4Proto struct {
+	Val  IPProto // 8 bits defines the protocol used in the data portion of the IP datagram.
+	Desc string  // Protocol description.
+}
+
+func (p *IPv4Proto) String() string {
+	return fmt.Sprintf("%s (%d)", p.Desc, p.Val)
+}
 
 type IPv4Flags struct {
+	Raw      uint8
 	Reserved uint8
-	MF       uint8
 	DF       uint8
+	MF       uint8
 }
 
 func (i *IPv4Flags) String() string {
-	return fmt.Sprintf("Reserved %d DF %d MF %d", i.Reserved, i.MF, i.DF)
+	return fmt.Sprintf("Reserved %d DF %d MF %d", i.Reserved, i.DF, i.MF)
 }
 
-func newIPv4Flags(flags uint8) *IPv4Flags {
+func NewIPv4Flags(flags uint8) *IPv4Flags {
 	return &IPv4Flags{
+		Raw:      flags, // 3 bits
 		Reserved: (flags >> 2) & 1,
 		DF:       (flags >> 1) & 1,
 		MF:       flags & 1,
 	}
 }
 
-// Internet Protocol version 4 is described in IETF publication RFC 791.
 type IPv4Packet struct {
+	// Internet Protocol version 4 is described in IETF publication RFC 791.
 	Version        uint8      // 4 bits version (for IPv4, this is always equal to 4).
 	IHL            uint8      // 4 bits size of header (number of 32-bit words).
 	DSCP           uint8      // 6 bits specifies differentiated services.
@@ -38,13 +60,31 @@ type IPv4Packet struct {
 	Flags          *IPv4Flags // 3 bits used to control or identify fragments.
 	FragmentOffset uint16     // 13 bits offset of a particular fragment.
 	TTL            uint8      // 8 bits limits a datagram's lifetime to prevent network failure.
-	Protocol       uint8      // 8 bits defines the protocol used in the data portion of the IP datagram.
-	ProtocolDesc   string     // Protocol description.
+	Protocol       *IPv4Proto
 	HeaderChecksum uint16     // 16 bits used for error checking of the header.
 	SrcIP          netip.Addr // IPv4 address of the sender of the packet.
 	DstIP          netip.Addr // IPv4 address of the receiver of the packet.
 	Options        []byte     // if ihl > 5
-	payload        []byte
+	Payload        []byte
+}
+
+func NewIPv4Packet(srcIP, dstIP netip.Addr, proto IPProto, payload []byte) (*IPv4Packet, error) {
+	if !srcIP.IsValid() || !srcIP.Is4() || !dstIP.IsValid() || !dstIP.Is4() {
+		return nil, fmt.Errorf("malformed IPv4 address")
+	}
+	ipPacket := &IPv4Packet{
+		Version:     4,
+		IHL:         5,
+		TotalLength: uint16(headerSizeIPv4 + len(payload)),
+		Flags:       NewIPv4Flags(0),
+		TTL:         64,
+		Protocol:    &IPv4Proto{Val: proto, Desc: protodesc(proto)},
+		SrcIP:       srcIP,
+		DstIP:       dstIP,
+		Payload:     payload,
+	}
+	ipPacket.HeaderChecksum, _ = CalculateIPv4Checksum(ipPacket.ToBytes())
+	return ipPacket, nil
 }
 
 func (p *IPv4Packet) String() string {
@@ -58,7 +98,7 @@ func (p *IPv4Packet) String() string {
 - Flags: %s
 - Fragment Offset: %d
 - TTL: %d
-- Protocol: %s (%d)
+- Protocol: %s
 - Header Checksum: %#04x
 - SrcIP: %s
 - DstIP: %s
@@ -76,13 +116,12 @@ func (p *IPv4Packet) String() string {
 		p.Flags,
 		p.FragmentOffset,
 		p.TTL,
-		p.ProtocolDesc,
 		p.Protocol,
 		p.HeaderChecksum,
 		p.SrcIP,
 		p.DstIP,
 		p.Options,
-		len(p.payload),
+		len(p.Payload),
 	)
 }
 
@@ -90,8 +129,29 @@ func (p *IPv4Packet) Summary() string {
 	return fmt.Sprintf("IPv4 Packet: Src IP: %s →  Dst IP: %s", p.SrcIP, p.DstIP)
 }
 
-// Parse parses the given byte data into an IPv4 packet struct.
-func (p *IPv4Packet) Parse(data []byte) error {
+func (p *IPv4Packet) MarshalBinary() ([]byte, error) {
+	b := make([]byte, 1+1+2+2+2+1+1+2+4+4 /* headerSizeIPv4 */ +len(p.Options)+len(p.Payload))
+	b[0] = p.Version<<4 | p.IHL
+	b[1] = p.DSCP<<2 | p.ECN
+	binary.BigEndian.PutUint16(b[2:4], p.TotalLength)
+	binary.BigEndian.PutUint16(b[4:6], p.Identification)
+	binary.BigEndian.PutUint16(b[6:8], uint16(p.Flags.Raw)<<13|p.FragmentOffset)
+	b[8] = p.TTL
+	b[9] = uint8(p.Protocol.Val)
+	binary.BigEndian.PutUint16(b[headerChecksumOffsetIPv4:12], p.HeaderChecksum)
+	copy(b[12:16], p.SrcIP.AsSlice())
+	copy(b[16:headerSizeIPv4], p.DstIP.AsSlice())
+	copy(b[headerSizeIPv4:headerSizeIPv4+len(p.Options)], p.Options)
+	copy(b[headerSizeIPv4+len(p.Options):], p.Payload)
+	return b, nil
+}
+
+func (p *IPv4Packet) ToBytes() []byte {
+	b, _ := p.MarshalBinary()
+	return b
+}
+
+func (p *IPv4Packet) UnmarshalBinary(data []byte) error {
 	if len(data) < headerSizeIPv4 {
 		return fmt.Errorf("minimum header size for IPv4 is %d bytes, got %d bytes", headerSizeIPv4, len(data))
 	}
@@ -106,38 +166,58 @@ func (p *IPv4Packet) Parse(data []byte) error {
 	p.Identification = binary.BigEndian.Uint16(data[4:6])
 	flagsOffset := binary.BigEndian.Uint16(data[6:8])
 	flags := uint8(flagsOffset >> 13)
-	p.Flags = newIPv4Flags(flags)
+	p.Flags = NewIPv4Flags(flags)
 	p.FragmentOffset = flagsOffset & (1<<13 - 1)
 	p.TTL = data[8]
-	p.Protocol = data[9]
-	p.HeaderChecksum = binary.BigEndian.Uint16(data[10:12])
-	p.SrcIP, _ = netip.AddrFromSlice(data[12:16])
-	p.DstIP, _ = netip.AddrFromSlice(data[16:headerSizeIPv4])
+	proto := IPProto(data[9])
+	p.Protocol = &IPv4Proto{Val: proto, Desc: protodesc(proto)}
+	p.HeaderChecksum = binary.BigEndian.Uint16(data[headerChecksumOffsetIPv4:12])
+	var ok bool
+	p.SrcIP, ok = netip.AddrFromSlice(data[12:16])
+	if !ok {
+		return fmt.Errorf("malformed IPv4 address")
+	}
+	p.DstIP, ok = netip.AddrFromSlice(data[16:headerSizeIPv4])
+	if !ok {
+		return fmt.Errorf("malformed IPv4 address")
+	}
 	if p.IHL > 5 {
 		offset := headerSizeIPv4 + ((p.IHL - 5) << 2)
 		p.Options = data[headerSizeIPv4:offset]
-		p.payload = data[offset:]
+		p.Payload = data[offset:]
 	} else {
-		p.payload = data[headerSizeIPv4:]
+		p.Payload = data[headerSizeIPv4:]
 	}
-	p.ProtocolDesc, _ = p.NextLayer()
 	return nil
 }
 
-func (p *IPv4Packet) NextLayer() (string, []byte) {
+// Parse parses the given byte data into an IPv4 packet struct.
+func (p *IPv4Packet) Parse(data []byte) error {
+	return p.UnmarshalBinary(data)
+}
+
+func protodesc(proto IPProto) string {
 	// https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
-	var layer string
-	switch p.Protocol {
+	var protodesc string
+	switch proto {
 	case 1:
-		layer = "ICMP"
+		protodesc = "ICMP"
 	case 6:
-		layer = "TCP"
+		protodesc = "TCP"
 	case 17:
-		layer = "UDP"
+		protodesc = "UDP"
 	default:
+		protodesc = "Unknown"
+	}
+	return protodesc
+}
+
+func (p *IPv4Packet) NextLayer() (string, []byte) {
+	layer := p.Protocol.Desc
+	if layer == "Unknown" {
 		layer = ""
 	}
-	return layer, p.payload
+	return layer, p.Payload
 }
 
 func dscpdesc(dscp uint8) string {
@@ -172,4 +252,42 @@ func dscpdesc(dscp uint8) string {
 		dscpdesc = "Unknown"
 	}
 	return dscpdesc
+}
+
+func CalculateIPv4Checksum(data []byte) (uint16, error) {
+	if len(data) < headerSizeIPv4 {
+		return 0, fmt.Errorf("minimum header size for IPv4 is %d bytes, got %d bytes", headerSizeIPv4, len(data))
+	}
+	var sum uint16
+	for i := 0; i < headerSizeIPv4; i += 2 {
+		if i != headerChecksumOffsetIPv4 {
+			sum = add16WithCarryWrapAround(sum, binary.BigEndian.Uint16(data[i:i+2]))
+		}
+	}
+	return ^sum, nil
+}
+
+func (p *IPv4Packet) PseudoHeader() *IPv4PseudoHeader {
+	return &IPv4PseudoHeader{SrcIP: p.SrcIP, DstIP: p.DstIP, Protocol: p.Protocol, TotalLength: uint16(len(p.Payload))}
+}
+
+type IPv4PseudoHeader struct {
+	SrcIP       netip.Addr
+	DstIP       netip.Addr
+	Protocol    *IPv4Proto
+	TotalLength uint16
+}
+
+func (ph *IPv4PseudoHeader) MarshalBinary() ([]byte, error) {
+	b := make([]byte, 4+4+1+1+2)
+	copy(b[0:4], ph.SrcIP.AsSlice())
+	copy(b[4:8], ph.DstIP.AsSlice())
+	binary.BigEndian.PutUint16(b[8:10], uint16(ph.Protocol.Val))
+	binary.BigEndian.PutUint16(b[10:], ph.TotalLength)
+	return b, nil
+}
+
+func (ph *IPv4PseudoHeader) ToBytes() []byte {
+	b, _ := ph.MarshalBinary()
+	return b
 }

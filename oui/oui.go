@@ -6,11 +6,8 @@ import (
 	"net"
 	"strconv"
 	"strings"
-)
 
-var (
-	BroadcastMAC = net.HardwareAddr{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
-	LoopbackMAC  = net.HardwareAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+	"github.com/shadowy-pycoder/mshark/network"
 )
 
 func outMulticastRange(hw string) bool {
@@ -58,10 +55,10 @@ func VendorFromMAC(hw net.HardwareAddr) string {
 //
 // If vendor is not found returns MAC address
 func VendorWithMAC(hw net.HardwareAddr) string {
-	if bytes.Equal(BroadcastMAC, hw) {
+	if bytes.Equal(network.BroadcastMAC, hw) {
 		return "Broadcast_" + hw.String()[9:]
 	}
-	if bytes.Equal(LoopbackMAC, hw) {
+	if bytes.Equal(network.LoopbackMAC, hw) {
 		return "Loopback_" + hw.String()[9:]
 	}
 	vendor := Vendor(hw.String(), false)

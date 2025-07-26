@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -17,8 +18,7 @@ import (
 
 const app string = "mshark"
 
-const usagePrefix string = `
-                ______   __                            __
+const usagePrefix string = `                ______   __                            __
                /      \ |  \                          |  \
  ______ ____  |  $$$$$$\| $$____    ______    ______  | $$   __
 |      \    \ | $$___\$$| $$    \  |      \  /      \ | $$  /  \
@@ -108,6 +108,11 @@ func root(args []string) error {
 		fmt.Print(usagePrefix)
 		flags.PrintDefaults()
 	}
+	flags.BoolFunc("V", "Show version and build information", func(flagValue string) error {
+		fmt.Printf("%s (built for %s %s with %s)\n", ms.Version, runtime.GOOS, runtime.GOARCH, runtime.Version())
+		os.Exit(0)
+		return nil
+	})
 
 	if err := flags.Parse(args); err != nil {
 		return err
