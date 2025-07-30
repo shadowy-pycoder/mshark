@@ -89,7 +89,7 @@ func root(args []string) error {
 	packetBuffer := flags.Int("b", 8192, "The maximum size of packet queue.")
 	flags.StringVar(&conf.Expr, "e", "", `BPF filter expression. Example: "ip proto tcp".`)
 	flags.BoolFunc("D", "Display list of interfaces and exit.", func(flagValue string) error {
-		if err := network.DisplayInterfaces(); err != nil {
+		if err := network.DisplayInterfaces(true); err != nil {
 			fmt.Fprintf(os.Stderr, "%s: %v\n", app, err)
 			os.Exit(2)
 		}

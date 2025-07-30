@@ -42,7 +42,7 @@ func InterfaceByName(name string) (*net.Interface, error) {
 	return in, nil
 }
 
-func DisplayInterfaces() error {
+func DisplayInterfaces(includeAny bool) error {
 	w := new(tabwriter.Writer)
 	w.Init(os.Stdout, 0, 0, 2, ' ', tabwriter.TabIndent)
 	ifaces, err := net.Interfaces()
@@ -50,7 +50,9 @@ func DisplayInterfaces() error {
 		return fmt.Errorf("failed to get network interfaces: %v", err)
 	}
 	fmt.Fprintln(w, "Index\tName\tFlags")
-	fmt.Fprintln(w, "0\tany\tUP")
+	if includeAny {
+		fmt.Fprintln(w, "0\tany\tUP")
+	}
 	for _, iface := range ifaces {
 		fmt.Fprintf(w, "%d\t%s\t%s\n", iface.Index, iface.Name, strings.ToUpper(iface.Flags.String()))
 	}
@@ -145,4 +147,17 @@ func GetIPv4PrefixFromInterface(iface *net.Interface) (netip.Prefix, error) {
 		}
 	}
 	return netip.Prefix{}, fmt.Errorf("no IPv4 prefix found")
+}
+
+func IsLocalAddress(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+	ip := net.ParseIP(host)
+	if ip != nil {
+		return ip.IsLoopback()
+	}
+	host = strings.ToLower(host)
+	return strings.HasSuffix(host, ".local") || host == "localhost"
 }

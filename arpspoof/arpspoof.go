@@ -23,7 +23,6 @@ import (
 )
 
 const (
-	protocolARP = 0x0806
 	unixEthPAll = 0x03
 )
 
@@ -32,6 +31,9 @@ var (
 	probeTargetsInterval    = 60 * time.Second
 	refreshARPTableInterval = 15 * time.Second
 	arpSpoofTargetsInterval = 1 * time.Second
+	errARPSpoofConfig       = fmt.Errorf(
+		`failed parsing arp options. Example: "targets 10.0.0.1,10.0.0.5-10,192.168.1.*,192.168.10.0/24;fullduplex false;debug true"`,
+	)
 )
 
 type Packet struct {
@@ -46,6 +48,45 @@ type ARPSpoofConfig struct {
 	FullDuplex bool
 	Logger     *zerolog.Logger
 	Debug      bool
+}
+
+// NewARPSpoofConfig creates ARPSpoofConfig from a list of options separated by semicolon and logger.
+//
+// Example: "targets 10.0.0.1,10.0.0.5-10,192.168.1.*,192.168.10.0/24;fullduplex false;debug true;interface eth0;gateway 192.168.1.1"`.
+// All fields in configuration string are optional.
+func NewARPSpoofConfig(s string, logger *zerolog.Logger) (*ARPSpoofConfig, error) {
+	asc := &ARPSpoofConfig{Logger: logger}
+	for opt := range strings.SplitSeq(strings.ToLower(s), ";") {
+		keyval := strings.SplitN(strings.Trim(opt, " "), " ", 2)
+		if len(keyval) < 2 {
+			return nil, errARPSpoofConfig
+		}
+		key := keyval[0]
+		val := keyval[1]
+		switch key {
+		case "targets":
+			asc.Targets = val
+		case "interface":
+			asc.Interface = val
+		case "gateway":
+			gateway, err := netip.ParseAddr(val)
+			if err != nil {
+				return nil, err
+			}
+			asc.Gateway = &gateway
+		case "fullduplex":
+			if val == "true" {
+				asc.FullDuplex = true
+			}
+		case "debug":
+			if val == "true" {
+				asc.Debug = true
+			}
+		default:
+			return nil, errARPSpoofConfig
+		}
+	}
+	return asc, nil
 }
 
 type ARPTable struct {

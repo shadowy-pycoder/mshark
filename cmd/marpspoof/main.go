@@ -38,7 +38,7 @@ func root(args []string) error {
 	flags.BoolVar(&conf.Debug, "d", false, "Enable debug logging")
 	nocolor := flags.Bool("nocolor", false, "Disable colored output")
 	flags.BoolFunc("I", "Display list of interfaces and exit.", func(flagValue string) error {
-		if err := network.DisplayInterfaces(); err != nil {
+		if err := network.DisplayInterfaces(false); err != nil {
 			fmt.Fprintf(os.Stderr, "%s: %v\n", app, err)
 			os.Exit(2)
 		}
