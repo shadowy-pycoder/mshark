@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/malfunkt/iprange"
@@ -156,19 +157,20 @@ func (at *ARPTable) Refresh() error {
 }
 
 type ARPSpoofer struct {
-	targets    []netip.Addr
-	gwIP       netip.Addr
-	gwMAC      net.HardwareAddr
-	iface      *net.Interface
-	hostIP     netip.Addr
-	hostMAC    net.HardwareAddr
-	fullduplex bool
-	arpTable   *ARPTable
-	packets    chan *Packet
-	logger     *zerolog.Logger
-	quit       chan bool
-	wg         sync.WaitGroup
-	p          *packet.Conn
+	targets      []netip.Addr
+	gwIP         netip.Addr
+	gwMAC        net.HardwareAddr
+	iface        *net.Interface
+	hostIP       netip.Addr
+	hostMAC      net.HardwareAddr
+	fullduplex   bool
+	startingFlag atomic.Bool
+	arpTable     *ARPTable
+	packets      chan *Packet
+	logger       *zerolog.Logger
+	quit         chan bool
+	wg           sync.WaitGroup
+	p            *packet.Conn
 }
 
 func NewARPSpoofer(conf *ARPSpoofConfig) (*ARPSpoofer, error) {
@@ -302,6 +304,7 @@ func NewARPSpoofer(conf *ARPSpoofConfig) (*ARPSpoofer, error) {
 }
 
 func (ar *ARPSpoofer) Start() {
+	ar.startingFlag.Store(true)
 	ar.logger.Info().Msg("[arp spoofer] Started")
 	go ar.handlePackets()
 	ar.logger.Debug().Msgf("[arp spoofer] Probing %d targets", len(ar.targets))
@@ -312,6 +315,7 @@ func (ar *ARPSpoofer) Start() {
 	go ar.probeTargets()
 	go ar.refreshARPTable()
 	ar.wg.Add(1)
+	ar.startingFlag.Store(false)
 	for {
 		select {
 		case <-ar.quit:
@@ -325,6 +329,9 @@ func (ar *ARPSpoofer) Start() {
 }
 
 func (ar *ARPSpoofer) Stop() error {
+	for ar.startingFlag.Load() {
+		time.Sleep(50 * time.Millisecond)
+	}
 	var err error
 	ar.logger.Info().Msg("[arp spoofer] Stopping...")
 	close(ar.quit)
