@@ -241,14 +241,16 @@ func (d *DNSMessage) Parse(data []byte) error {
 	if len(data) < headerSizeDNS {
 		return fmt.Errorf("minimum header size for DNS is %d bytes, got %d bytes", headerSizeDNS, len(data))
 	}
-	d.TransactionID = binary.BigEndian.Uint16(data[0:2])
-	d.Flags = newDNSFlags(binary.BigEndian.Uint16(data[2:4]))
-	d.QDCount = binary.BigEndian.Uint16(data[4:6])
-	d.ANCount = binary.BigEndian.Uint16(data[6:8])
-	d.NSCount = binary.BigEndian.Uint16(data[8:10])
-	d.ARCount = binary.BigEndian.Uint16(data[10:headerSizeDNS])
+	buf := make([]byte, 0, len(data))
+	buf = append(buf, data...)
+	d.TransactionID = binary.BigEndian.Uint16(buf[0:2])
+	d.Flags = newDNSFlags(binary.BigEndian.Uint16(buf[2:4]))
+	d.QDCount = binary.BigEndian.Uint16(buf[4:6])
+	d.ANCount = binary.BigEndian.Uint16(buf[6:8])
+	d.NSCount = binary.BigEndian.Uint16(buf[8:10])
+	d.ARCount = binary.BigEndian.Uint16(buf[10:headerSizeDNS])
 	var tail []byte
-	payload := data[headerSizeDNS:]
+	payload := buf[headerSizeDNS:]
 	d.Questions = nil
 	d.AnswerRRs = nil
 	d.AuthorityRRs = nil
@@ -459,7 +461,7 @@ type RDataSOA struct {
 }
 
 func (d *RDataSOA) String() string {
-	return fmt.Sprintf(`Primary name server: %s 
+	return fmt.Sprintf(`Primary name server: %s
     - Responsible authority's mailbox: %s
     - Serial number: %d
     - Refresh interval: %d
@@ -498,7 +500,6 @@ type RDataAAAA struct {
 
 func (d *RDataAAAA) String() string {
 	return fmt.Sprintf("Address: %s", d.Address)
-
 }
 
 type RDataOPT struct {
@@ -510,7 +511,7 @@ type RDataOPT struct {
 }
 
 func (d *RDataOPT) String() string {
-	return fmt.Sprintf(`UDP payload size: %d 
+	return fmt.Sprintf(`UDP payload size: %d
     - Higher bits in extended RCODE: %#02x
     - EDNS0 version: %d
     - Z: %d

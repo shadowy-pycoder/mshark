@@ -155,38 +155,40 @@ func (p *IPv4Packet) UnmarshalBinary(data []byte) error {
 	if len(data) < headerSizeIPv4 {
 		return fmt.Errorf("minimum header size for IPv4 is %d bytes, got %d bytes", headerSizeIPv4, len(data))
 	}
-	versionIHL := data[0]
+	buf := make([]byte, 0, len(data))
+	buf = append(buf, data...)
+	versionIHL := buf[0]
 	p.Version = versionIHL >> 4
 	p.IHL = versionIHL & 15
-	dscpECN := data[1]
+	dscpECN := buf[1]
 	p.DSCP = dscpECN >> 2
 	p.DSCPDesc = dscpdesc(p.DSCP)
 	p.ECN = dscpECN & 3
-	p.TotalLength = binary.BigEndian.Uint16(data[2:4])
-	p.Identification = binary.BigEndian.Uint16(data[4:6])
-	flagsOffset := binary.BigEndian.Uint16(data[6:8])
+	p.TotalLength = binary.BigEndian.Uint16(buf[2:4])
+	p.Identification = binary.BigEndian.Uint16(buf[4:6])
+	flagsOffset := binary.BigEndian.Uint16(buf[6:8])
 	flags := uint8(flagsOffset >> 13)
 	p.Flags = NewIPv4Flags(flags)
 	p.FragmentOffset = flagsOffset & (1<<13 - 1)
-	p.TTL = data[8]
-	proto := IPProto(data[9])
+	p.TTL = buf[8]
+	proto := IPProto(buf[9])
 	p.Protocol = &IPv4Proto{Val: proto, Desc: protodesc(proto)}
-	p.HeaderChecksum = binary.BigEndian.Uint16(data[headerChecksumOffsetIPv4:12])
+	p.HeaderChecksum = binary.BigEndian.Uint16(buf[headerChecksumOffsetIPv4:12])
 	var ok bool
-	p.SrcIP, ok = netip.AddrFromSlice(data[12:16])
+	p.SrcIP, ok = netip.AddrFromSlice(buf[12:16])
 	if !ok {
 		return fmt.Errorf("malformed IPv4 address")
 	}
-	p.DstIP, ok = netip.AddrFromSlice(data[16:headerSizeIPv4])
+	p.DstIP, ok = netip.AddrFromSlice(buf[16:headerSizeIPv4])
 	if !ok {
 		return fmt.Errorf("malformed IPv4 address")
 	}
 	if p.IHL > 5 {
 		offset := headerSizeIPv4 + ((p.IHL - 5) << 2)
-		p.Options = data[headerSizeIPv4:offset]
-		p.Payload = data[offset:]
+		p.Options = buf[headerSizeIPv4:offset]
+		p.Payload = buf[offset:]
 	} else {
-		p.Payload = data[headerSizeIPv4:]
+		p.Payload = buf[headerSizeIPv4:]
 	}
 	return nil
 }

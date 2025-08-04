@@ -71,11 +71,13 @@ func (u *UDPSegment) UnmarshalBinary(data []byte) error {
 	if len(data) < headerSizeUDP {
 		return fmt.Errorf("minimum header size for UDP is %d bytes, got %d bytes", headerSizeUDP, len(data))
 	}
-	u.SrcPort = binary.BigEndian.Uint16(data[0:2])
-	u.DstPort = binary.BigEndian.Uint16(data[2:4])
-	u.UDPLength = binary.BigEndian.Uint16(data[4:6])
-	u.Checksum = binary.BigEndian.Uint16(data[6:headerSizeUDP])
-	u.Payload = data[headerSizeUDP:]
+	buf := make([]byte, 0, len(data))
+	buf = append(buf, data...)
+	u.SrcPort = binary.BigEndian.Uint16(buf[0:2])
+	u.DstPort = binary.BigEndian.Uint16(buf[2:4])
+	u.UDPLength = binary.BigEndian.Uint16(buf[4:6])
+	u.Checksum = binary.BigEndian.Uint16(buf[6:headerSizeUDP])
+	u.Payload = buf[headerSizeUDP:]
 	return nil
 }
 

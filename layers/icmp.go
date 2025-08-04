@@ -46,10 +46,12 @@ func (i *ICMPSegment) Parse(data []byte) error {
 	if len(data) < headerSizeICMP {
 		return fmt.Errorf("minimum header size for ICMP is %d bytes, got %d bytes", headerSizeICMP, len(data))
 	}
-	i.Type = data[0]
-	i.Code = data[1]
-	i.Checksum = binary.BigEndian.Uint16(data[2:4])
-	i.Data = data[headerSizeICMP:]
+	buf := make([]byte, 0, len(data))
+	buf = append(buf, data...)
+	i.Type = buf[0]
+	i.Code = buf[1]
+	i.Checksum = binary.BigEndian.Uint16(buf[2:4])
+	i.Data = buf[headerSizeICMP:]
 	var pLen int
 	switch i.Type {
 	case 0, 3, 5, 8, 11:

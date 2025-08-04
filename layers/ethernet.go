@@ -92,12 +92,14 @@ func (ef *EthernetFrame) UnmarshalBinary(data []byte) error {
 	if len(data) < headerSizeEthernet {
 		return fmt.Errorf("did not read a complete Ethernet frame, only %d bytes read", len(data))
 	}
-	ef.DstMAC = net.HardwareAddr(data[0:6])
-	ef.SrcMAC = net.HardwareAddr(data[6:12])
-	et := EtherType(binary.BigEndian.Uint16(data[12:14]))
+	buf := make([]byte, 0, len(data))
+	buf = append(buf, data...)
+	ef.DstMAC = net.HardwareAddr(buf[0:6])
+	ef.SrcMAC = net.HardwareAddr(buf[6:12])
+	et := EtherType(binary.BigEndian.Uint16(buf[12:14]))
 	etdesc := ethertypedesc(et)
 	ef.EtherType = &EthernetType{Val: et, Desc: etdesc}
-	ef.Payload = data[headerSizeEthernet:]
+	ef.Payload = buf[headerSizeEthernet:]
 	ef.DstVendor = oui.VendorWithMAC(ef.DstMAC)
 	ef.SrcVendor = oui.VendorWithMAC(ef.SrcMAC)
 	return nil

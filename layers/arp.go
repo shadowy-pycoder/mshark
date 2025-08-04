@@ -148,30 +148,32 @@ func (ap *ARPPacket) UnmarshalBinary(data []byte) error {
 	if len(data) < headerSizeARP {
 		return fmt.Errorf("minimum header size for ARP is %d bytes, got %d bytes", headerSizeARP, len(data))
 	}
-	ap.HardwareType = binary.BigEndian.Uint16(data[0:2])
-	ap.ProtocolType = binary.BigEndian.Uint16(data[2:4])
+	buf := make([]byte, 0, len(data))
+	buf = append(buf, data...)
+	ap.HardwareType = binary.BigEndian.Uint16(buf[0:2])
+	ap.ProtocolType = binary.BigEndian.Uint16(buf[2:4])
 	ap.ProtocolTypeDesc = ptypedesc(ap.ProtocolType)
 	if ap.ProtocolTypeDesc == "Unknown" {
 		return fmt.Errorf("unknown protocol type")
 	}
-	ap.Hlen = data[4]
-	ap.Plen = data[5]
-	op := Operation(binary.BigEndian.Uint16(data[6:8]))
+	ap.Hlen = buf[4]
+	ap.Plen = buf[5]
+	op := Operation(binary.BigEndian.Uint16(buf[6:8]))
 	opdesc := opdesc(op)
 	if opdesc == "Unknown" {
 		return fmt.Errorf("unknown operation")
 	}
 	ap.Op = &ARPOperation{Val: op, Desc: opdesc}
 	hoffset := 8 + ap.Hlen
-	ap.SenderMAC = net.HardwareAddr(data[8:hoffset])
+	ap.SenderMAC = net.HardwareAddr(buf[8:hoffset])
 	poffset := hoffset + ap.Plen
 	var ok bool
-	ap.SenderIP, ok = netip.AddrFromSlice(data[hoffset:poffset])
+	ap.SenderIP, ok = netip.AddrFromSlice(buf[hoffset:poffset])
 	if !ok {
 		return fmt.Errorf("failed parsing sender IP address")
 	}
-	ap.TargetMAC = net.HardwareAddr(data[poffset : poffset+ap.Hlen])
-	ap.TargetIP, ok = netip.AddrFromSlice(data[poffset+ap.Hlen : poffset+ap.Hlen+ap.Plen])
+	ap.TargetMAC = net.HardwareAddr(buf[poffset : poffset+ap.Hlen])
+	ap.TargetIP, ok = netip.AddrFromSlice(buf[poffset+ap.Hlen : poffset+ap.Hlen+ap.Plen])
 	if !ok {
 		return fmt.Errorf("failed parsing target IP address")
 	}

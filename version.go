@@ -1,3 +1,3 @@
 package mshark
 
-const Version string = "mshark v0.0.10"
+const Version string = "mshark v0.0.11"

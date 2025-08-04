@@ -21,9 +21,11 @@ func (f *FTPMessage) Summary() string {
 }
 
 func (f *FTPMessage) Parse(data []byte) error {
+	buf := make([]byte, 0, len(data))
+	buf = append(buf, data...)
 	f.summary = nil
 	f.data = nil
-	sp := bytes.Split(data, crlf)
+	sp := bytes.Split(buf, crlf)
 	lsp := len(sp)
 	switch {
 	case lsp > 2:

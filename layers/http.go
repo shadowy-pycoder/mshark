@@ -59,13 +59,15 @@ func (h *HTTPMessage) Summary() string {
 }
 
 func (h *HTTPMessage) Parse(data []byte) error {
-	if !bytes.Contains(data, protohttp10) && !bytes.Contains(data, protohttp11) {
+	buf := make([]byte, 0, len(data))
+	buf = append(buf, data...)
+	if !bytes.Contains(buf, protohttp10) && !bytes.Contains(buf, protohttp11) {
 		h.Request = nil
 		h.Response = nil
 		return nil
 	}
-	reader := bufio.NewReader(bytes.NewReader(data))
-	if bytes.HasPrefix(data, protohttp11) || bytes.HasPrefix(data, protohttp10) {
+	reader := bufio.NewReader(bytes.NewReader(buf))
+	if bytes.HasPrefix(buf, protohttp11) || bytes.HasPrefix(buf, protohttp10) {
 		resp, err := http.ReadResponse(reader, nil)
 		if err != nil {
 			return err
@@ -73,7 +75,7 @@ func (h *HTTPMessage) Parse(data []byte) error {
 		h.Response = resp
 		h.Request = nil
 	} else {
-		reader := bufio.NewReader(bytes.NewReader(data))
+		reader := bufio.NewReader(bytes.NewReader(buf))
 		req, err := http.ReadRequest(reader)
 		if err != nil {
 			return err

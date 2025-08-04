@@ -114,19 +114,21 @@ func (t *TCPSegment) Parse(data []byte) error {
 	if len(data) < headerSizeTCP {
 		return fmt.Errorf("minimum header size for TCP is %d bytes, got %d bytes", headerSizeTCP, len(data))
 	}
-	t.SrcPort = binary.BigEndian.Uint16(data[0:2])
-	t.DstPort = binary.BigEndian.Uint16(data[2:4])
-	t.SeqNumber = binary.BigEndian.Uint32(data[4:8])
-	t.AckNumber = binary.BigEndian.Uint32(data[8:12])
-	offsetReservedFlags := binary.BigEndian.Uint16(data[12:14])
+	buf := make([]byte, 0, len(data))
+	buf = append(buf, data...)
+	t.SrcPort = binary.BigEndian.Uint16(buf[0:2])
+	t.DstPort = binary.BigEndian.Uint16(buf[2:4])
+	t.SeqNumber = binary.BigEndian.Uint32(buf[4:8])
+	t.AckNumber = binary.BigEndian.Uint32(buf[8:12])
+	offsetReservedFlags := binary.BigEndian.Uint16(buf[12:14])
 	t.DataOffset = uint8(offsetReservedFlags >> 12)
 	t.Reserved = uint8((offsetReservedFlags >> 8) & 15)
 	t.Flags = newTCPFlags(uint8(offsetReservedFlags & (1<<8 - 1)))
-	t.WindowSize = binary.BigEndian.Uint16(data[14:16])
-	t.Checksum = binary.BigEndian.Uint16(data[16:18])
-	t.UrgentPointer = binary.BigEndian.Uint16(data[18:headerSizeTCP])
-	t.Options = data[headerSizeTCP : t.DataOffset<<2]
-	t.payload = data[t.DataOffset<<2:]
+	t.WindowSize = binary.BigEndian.Uint16(buf[14:16])
+	t.Checksum = binary.BigEndian.Uint16(buf[16:18])
+	t.UrgentPointer = binary.BigEndian.Uint16(buf[18:headerSizeTCP])
+	t.Options = buf[headerSizeTCP : t.DataOffset<<2]
+	t.payload = buf[t.DataOffset<<2:]
 	return nil
 }
 

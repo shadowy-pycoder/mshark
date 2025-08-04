@@ -85,34 +85,36 @@ func (s *SSHMessage) Parse(data []byte) error {
 	if len(data) < messageSizeSSH {
 		return fmt.Errorf("minimum message size for SSH is %d bytes, got %d bytes", messageSizeSSH, len(data))
 	}
+	buf := make([]byte, 0, len(data))
+	buf = append(buf, data...)
 	s.Protocol = ""
 	s.Messages = nil
-	if bytes.HasSuffix(data, crlf) {
-		s.Protocol = bytesToStr(bytes.TrimSuffix(data, crlf))
+	if bytes.HasSuffix(buf, crlf) {
+		s.Protocol = bytesToStr(bytes.TrimSuffix(buf, crlf))
 		return nil
 	}
 	s.Messages = make([]*Message, 0, 3)
-	for len(data) > 0 {
+	for len(buf) > 0 {
 		m := &Message{}
 		s.Messages = append(s.Messages, m)
-		plen := binary.BigEndian.Uint32(data[0:4])
+		plen := binary.BigEndian.Uint32(buf[0:4])
 		if plen > 0xffff {
-			m.Payload = data
+			m.Payload = buf
 			break
 		}
-		m.MesssageType = data[5]
+		m.MesssageType = buf[5]
 		if m.MesssageTypeDesc = mtypedesc(m.MesssageType); m.MesssageTypeDesc == "Unknown" {
-			m.Payload = data
+			m.Payload = buf
 			break
 		}
 		m.PacketLength = plen
-		m.PaddingLength = data[4]
+		m.PaddingLength = buf[4]
 		offset := int(messageSizeSSH + m.PacketLength - 2)
-		if offset <= len(data) {
-			m.Payload = data[messageSizeSSH:offset]
-			data = data[offset:]
+		if offset <= len(buf) {
+			m.Payload = buf[messageSizeSSH:offset]
+			buf = buf[offset:]
 		} else {
-			m.Payload = data[messageSizeSSH:]
+			m.Payload = buf[messageSizeSSH:]
 			break
 		}
 	}

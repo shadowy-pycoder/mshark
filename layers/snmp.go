@@ -18,7 +18,9 @@ func (s *SNMPMessage) Summary() string {
 }
 
 func (s *SNMPMessage) Parse(data []byte) error {
-	s.Payload = data
+	buf := make([]byte, 0, len(data))
+	buf = append(buf, data...)
+	s.Payload = buf
 	return nil
 }
 

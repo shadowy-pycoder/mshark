@@ -44,10 +44,12 @@ func (i *ICMPv6Segment) Parse(data []byte) error {
 	if len(data) < headerSizeICMPv6 {
 		return fmt.Errorf("minimum header size for ICMPv6 is %d bytes, got %d bytes", headerSizeICMPv6, len(data))
 	}
-	i.Type = data[0]
-	i.Code = data[1]
-	i.Checksum = binary.BigEndian.Uint16(data[2:headerSizeICMPv6])
-	i.Data = data[headerSizeICMPv6:]
+	buf := make([]byte, 0, len(data))
+	buf = append(buf, data...)
+	i.Type = buf[0]
+	i.Code = buf[1]
+	i.Checksum = binary.BigEndian.Uint16(buf[2:headerSizeICMPv6])
+	i.Data = buf[headerSizeICMPv6:]
 	var pLen int
 	switch i.Type {
 	case 1, 2, 3, 4, 128, 129, 133:

@@ -80,17 +80,19 @@ func (p *IPv6Packet) Parse(data []byte) error {
 	if len(data) < headerSizeIPv6 {
 		return fmt.Errorf("minimum header size for IPv6 is %d bytes, got %d bytes", headerSizeIPv6, len(data))
 	}
-	versionTrafficFlow := binary.BigEndian.Uint32(data[0:4])
+	buf := make([]byte, 0, len(data))
+	buf = append(buf, data...)
+	versionTrafficFlow := binary.BigEndian.Uint32(buf[0:4])
 	p.Version = uint8(versionTrafficFlow >> 28)
 	p.TrafficClass = newTrafficiClass(uint8((versionTrafficFlow >> 20) & 0xFF))
 	p.FlowLabel = versionTrafficFlow & (1<<20 - 1)
-	p.PayloadLength = binary.BigEndian.Uint16(data[4:6])
-	p.NextHeader = data[6]
+	p.PayloadLength = binary.BigEndian.Uint16(buf[4:6])
+	p.NextHeader = buf[6]
 	p.NextHeaderDesc = p.nextHeader()
-	p.HopLimit = data[7]
-	p.SrcIP, _ = netip.AddrFromSlice(data[8:24])
-	p.DstIP, _ = netip.AddrFromSlice(data[24:headerSizeIPv6])
-	p.payload = data[headerSizeIPv6:]
+	p.HopLimit = buf[7]
+	p.SrcIP, _ = netip.AddrFromSlice(buf[8:24])
+	p.DstIP, _ = netip.AddrFromSlice(buf[24:headerSizeIPv6])
+	p.payload = buf[headerSizeIPv6:]
 	return nil
 }
 

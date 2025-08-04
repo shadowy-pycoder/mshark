@@ -539,29 +539,31 @@ func (t *TLSMessage) printRecords() string {
 }
 
 func (t *TLSMessage) Parse(data []byte) error {
+	buf := make([]byte, 0, len(data))
+	buf = append(buf, data...)
 	t.Records = make([]*Record, 0, 5)
-	if len(data) < headerSizeTLS {
+	if len(buf) < headerSizeTLS {
 		return ErrTLSTooShort
 	}
-	for len(data) > 0 {
-		ctype := data[0]
+	for len(buf) > 0 {
+		ctype := buf[0]
 		ctdesc := ctdesc(ctype)
 		if ctdesc == "Unknown" {
 			break
 		}
-		if len(data) < 3 {
+		if len(buf) < 3 {
 			break
 		}
-		ver := binary.BigEndian.Uint16(data[1:3])
+		ver := binary.BigEndian.Uint16(buf[1:3])
 		verdesc := verdesc(ver)
 		if verdesc == "Unknown" {
 			break
 		}
-		if len(data) < headerSizeTLS {
+		if len(buf) < headerSizeTLS {
 			break
 		}
-		rlen := binary.BigEndian.Uint16(data[3:headerSizeTLS])
-		rb := min(uint16(headerSizeTLS+rlen), uint16(len(data)))
+		rlen := binary.BigEndian.Uint16(buf[3:headerSizeTLS])
+		rb := min(uint16(headerSizeTLS+rlen), uint16(len(buf)))
 		if rb < headerSizeTLS {
 			break
 		}
@@ -570,12 +572,12 @@ func (t *TLSMessage) Parse(data []byte) error {
 			ContentTypeDesc: ctdesc,
 			Version:         &TLSVersion{Val: ver, Desc: verdesc},
 			Length:          rlen,
-			Data:            data[headerSizeTLS:rb],
+			Data:            buf[headerSizeTLS:rb],
 		}
 		t.Records = append(t.Records, r)
-		data = data[rb:]
+		buf = buf[rb:]
 	}
-	t.Data = data
+	t.Data = buf
 	return nil
 }
 
