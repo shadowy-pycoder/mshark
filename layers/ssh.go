@@ -90,17 +90,27 @@ func (s *SSHMessage) Parse(data []byte) error {
 	buf := make([]byte, 0, len(data))
 	buf = append(buf, data...)
 	if bytes.HasSuffix(buf, crlf) {
-		s.Protocol = bytesToStr(bytes.TrimSuffix(buf, crlf))
+		p := bytes.TrimSuffix(buf, crlf)
+		if !bytes.Contains(p, protoSSH) {
+			return fmt.Errorf("message should contain SSH-")
+		}
+		s.Protocol = bytesToStr(p)
 		return nil
 	}
 	s.Messages = make([]*Message, 0, 3)
 	for len(buf) > 0 {
+		if len(buf) < 4 {
+			return ErrSliceBounds
+		}
 		m := &Message{}
 		s.Messages = append(s.Messages, m)
 		plen := binary.BigEndian.Uint32(buf[0:4])
 		if plen > 0xffff {
 			m.Payload = buf
 			break
+		}
+		if len(buf) < 5 {
+			return ErrSliceBounds
 		}
 		m.MesssageType = buf[5]
 		if m.MesssageTypeDesc = mtypedesc(m.MesssageType); m.MesssageTypeDesc == "Unknown" {

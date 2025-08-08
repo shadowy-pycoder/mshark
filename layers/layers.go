@@ -88,6 +88,12 @@ func parseNextLayerFromBytes(data []byte) Layer {
 			return next
 		}
 	}
+	if firstByte == 0x30 {
+		next = GetNextLayer("SNMP")
+		if err := next.Parse(buf); err == nil {
+			return next
+		}
+	}
 	if len(buf) > 3 {
 		b1 := binary.BigEndian.Uint16(buf[0:2])
 		b2 := binary.BigEndian.Uint16(buf[2:4])
@@ -138,7 +144,7 @@ func addrMatch(src, dst *uint16, ports []uint16) bool {
 	return false
 }
 
-func parseNextLayerFromAddress(data []byte, src, dst *uint16) Layer {
+func parseNextLayerFromPorts(data []byte, src, dst *uint16) Layer {
 	if len(data) == 0 {
 		return nil
 	}
@@ -154,7 +160,7 @@ func parseNextLayerFromAddress(data []byte, src, dst *uint16) Layer {
 		next = GetNextLayer("FTP")
 	case addrMatch(src, dst, []uint16{22, 2222, 2200, 222, 2022}):
 		next = GetNextLayer("SSH")
-	case addrMatch(src, dst, []uint16{443, 465, 993, 995, 8443, 9443, 10443, 8444}):
+	case addrMatch(src, dst, []uint16{443, 465, 993, 995, 8443, 9443, 10443, 8444, 5228}):
 		next = GetNextLayer("TLS")
 	default:
 		return nil
@@ -171,7 +177,7 @@ func ParseNextLayer(data []byte, src, dst *uint16) Layer {
 	buf = append(buf, data...)
 	var next Layer
 	if src != nil || dst != nil {
-		if next = parseNextLayerFromAddress(buf, src, dst); next != nil {
+		if next = parseNextLayerFromPorts(buf, src, dst); next != nil {
 			return next
 		}
 	}

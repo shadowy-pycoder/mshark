@@ -18,6 +18,9 @@ func (s *SNMPMessage) Summary() string {
 }
 
 func (s *SNMPMessage) Parse(data []byte) error {
+	if data[0] != 0x30 {
+		return fmt.Errorf("not ASN.1 SEQUENCE")
+	}
 	buf := make([]byte, 0, len(data))
 	buf = append(buf, data...)
 	s.Payload = buf

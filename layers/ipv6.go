@@ -90,8 +90,15 @@ func (p *IPv6Packet) Parse(data []byte) error {
 	p.NextHeader = buf[6]
 	p.NextHeaderDesc = p.nextHeader()
 	p.HopLimit = buf[7]
-	p.SrcIP, _ = netip.AddrFromSlice(buf[8:24])
-	p.DstIP, _ = netip.AddrFromSlice(buf[24:headerSizeIPv6])
+	var ok bool
+	p.SrcIP, ok = netip.AddrFromSlice(buf[8:24])
+	if !ok {
+		return fmt.Errorf("malformed IPv6 address")
+	}
+	p.DstIP, ok = netip.AddrFromSlice(buf[24:headerSizeIPv6])
+	if !ok {
+		return fmt.Errorf("malformed IPv6 address")
+	}
 	p.Payload = buf[headerSizeIPv6:]
 	return nil
 }
