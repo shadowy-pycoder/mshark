@@ -8,6 +8,8 @@ import (
 	"strings"
 )
 
+// TODO (shadowy-pycoder): add MarshalJSON
+
 const headerSizeDNS = 12
 
 type DNSFlags struct {
@@ -835,6 +837,9 @@ func parseRData(payload, tail []byte, typ uint16, rdl int) (fmt.Stringer, []byte
 			DataLen:            uint16(rdl),
 		}
 	case 65:
+		if len(tail) < 3 {
+			return nil, nil, ErrSliceBounds
+		}
 		priority := binary.BigEndian.Uint16(tail[0:2])
 		nameLength := tail[2]
 		var target string

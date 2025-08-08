@@ -9,6 +9,8 @@ import (
 
 const messageSizeSSH = 6
 
+var protoSSH = []byte("SSH-")
+
 type Message struct {
 	PacketLength     uint32
 	PaddingLength    uint8
@@ -87,8 +89,6 @@ func (s *SSHMessage) Parse(data []byte) error {
 	}
 	buf := make([]byte, 0, len(data))
 	buf = append(buf, data...)
-	s.Protocol = ""
-	s.Messages = nil
 	if bytes.HasSuffix(buf, crlf) {
 		s.Protocol = bytesToStr(bytes.TrimSuffix(buf, crlf))
 		return nil
