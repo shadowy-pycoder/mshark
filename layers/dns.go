@@ -589,6 +589,8 @@ func svcparamkeydesc(key uint16) string {
 		svcdesc = "ohttp"
 	case 9:
 		svcdesc = "tls-supported-groups"
+	default:
+		svcdesc = "Unknown"
 	}
 	return svcdesc
 }

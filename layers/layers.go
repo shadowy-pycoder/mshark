@@ -47,6 +47,7 @@ type Layer interface {
 }
 
 func GetNextLayer(layer string) Layer {
+	// TODO (shadowy-pycoder): add this to NextLayer, choose by ports, parse, use fallback on error
 	switch layer {
 	case "ETH":
 		return &EthernetFrame{}
