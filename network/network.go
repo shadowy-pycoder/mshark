@@ -161,3 +161,35 @@ func IsLocalAddress(addr string) bool {
 	host = strings.ToLower(host)
 	return strings.HasSuffix(host, ".local") || host == "localhost"
 }
+
+// AddrEqual compares two address strings and returns true if they are equal.
+//
+// It treats loopback and unspecified IPs as equivalent. Returns false in case of inequality or error.
+func AddrEqual(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	addr1, err := netip.ParseAddrPort(a)
+	if err != nil {
+		return false
+	}
+	addr2, err := netip.ParseAddrPort(b)
+	if err != nil {
+		return false
+	}
+	if addr1.Addr().IsLoopback() {
+		if addr1.Addr().Is4In6() || addr1.Addr().Is4() {
+			addr1 = netip.AddrPortFrom(netip.IPv4Unspecified(), addr1.Port())
+		} else {
+			addr1 = netip.AddrPortFrom(netip.IPv6Unspecified(), addr1.Port())
+		}
+	}
+	if addr2.Addr().IsLoopback() {
+		if addr2.Addr().Is4In6() || addr2.Addr().Is4() {
+			addr2 = netip.AddrPortFrom(netip.IPv4Unspecified(), addr2.Port())
+		} else {
+			addr2 = netip.AddrPortFrom(netip.IPv6Unspecified(), addr2.Port())
+		}
+	}
+	return addr1.Compare(addr2) == 0
+}

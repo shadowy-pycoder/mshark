@@ -82,7 +82,10 @@ func (mw *Writer) WritePacket(timestamp time.Time, data []byte) error {
 	mw.packets++
 	fmt.Fprintf(mw.w, "- Packet: %d Timestamp: %s\n", mw.packets, timestamp.Format("2006-01-02T15:04:05-0700"))
 	fmt.Fprintln(mw.w, "==================================================================")
-	next := layers.LayerMap["ETH"]
+	next := layers.GetNextLayer("ETH")
+	if next == nil {
+		return nil
+	}
 	if err := next.Parse(data); err != nil {
 		return err
 	}
@@ -93,7 +96,10 @@ func (mw *Writer) WritePacket(timestamp time.Time, data []byte) error {
 		if name == "" || data == nil || len(data) == 0 {
 			return nil
 		}
-		next = layers.LayerMap[name]
+		next = layers.GetNextLayer(name)
+		if next == nil {
+			return nil
+		}
 		if err := next.Parse(data); err != nil {
 			return err
 		}

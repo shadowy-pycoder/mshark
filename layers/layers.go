@@ -6,7 +6,7 @@ import (
 	"unsafe"
 )
 
-const maxLenSummary = 100
+const maxLenSummary = 110
 
 var LayerMap = map[string]Layer{
 	"ETH":    &EthernetFrame{},
@@ -26,15 +26,17 @@ var LayerMap = map[string]Layer{
 }
 
 var (
-	bspace   = []byte(" ")
-	dash     = []byte("- ")
-	lfd      = []byte("\n- ")
-	slfd     = "\n- "
-	lf       = []byte("\n")
-	crlf     = []byte("\r\n")
-	dcrlf    = []byte("\r\n\r\n")
-	ellipsis = []byte("...")
-	contdata = []byte("Continuation data")
+	bspace            = []byte(" ")
+	dash              = []byte("- ")
+	lfd               = []byte("\n- ")
+	slfd              = "\n- "
+	lf                = []byte("\n")
+	crlf              = []byte("\r\n")
+	dcrlf             = []byte("\r\n\r\n")
+	ellipsis          = []byte("...")
+	contdata          = []byte("Continuation data")
+	ErrParsingAddress = fmt.Errorf("failed parsing IP address")
+	ErrSliceBounds    = fmt.Errorf("slice bounds out of range")
 )
 
 type Layer interface {
@@ -42,6 +44,41 @@ type Layer interface {
 	Parse(data []byte) error
 	NextLayer() (layer string, payload []byte)
 	Summary() string
+}
+
+func GetNextLayer(layer string) Layer {
+	switch layer {
+	case "ETH":
+		return &EthernetFrame{}
+	case "IPv4":
+		return &IPv4Packet{}
+	case "IPv6":
+		return &IPv6Packet{}
+	case "ARP":
+		return &ARPPacket{}
+	case "TCP":
+		return &TCPSegment{}
+	case "UDP":
+		return &UDPSegment{}
+	case "ICMP":
+		return &ICMPSegment{}
+	case "ICMPv6":
+		return &ICMPv6Segment{}
+	case "DNS":
+		return &DNSMessage{}
+	case "FTP":
+		return &FTPMessage{}
+	case "HTTP":
+		return &HTTPMessage{}
+	case "SNMP":
+		return &SNMPMessage{}
+	case "SSH":
+		return &SSHMessage{}
+	case "TLS":
+		return &TLSMessage{}
+	default:
+		return nil
+	}
 }
 
 func bytesToStr(b []byte) string {
