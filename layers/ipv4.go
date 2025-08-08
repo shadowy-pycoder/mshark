@@ -185,6 +185,9 @@ func (p *IPv4Packet) UnmarshalBinary(data []byte) error {
 	}
 	if p.IHL > 5 {
 		offset := headerSizeIPv4 + ((p.IHL - 5) << 2)
+		if int(offset) > len(buf) {
+			return ErrSliceBounds
+		}
 		p.Options = buf[headerSizeIPv4:offset]
 		p.Payload = buf[offset:]
 	} else {
