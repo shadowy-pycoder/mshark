@@ -214,13 +214,16 @@ func protodesc(proto IPProto) string {
 	return protodesc
 }
 
-func (p *IPv4Packet) NextLayer() (string, []byte) {
-	layer := p.Protocol.Desc
-	if layer == "Unknown" {
-		layer = ""
+func (p *IPv4Packet) NextLayer() Layer {
+	if next := GetNextLayer(p.Protocol.Desc); next != nil {
+		if err := next.Parse(p.Payload); err == nil {
+			return next
+		}
 	}
-	return layer, p.Payload
+	return ParseNextLayer(p.Payload, nil, nil)
 }
+
+func (p *IPv4Packet) Name() string { return "IPv4" }
 
 func dscpdesc(dscp uint8) string {
 	// https://en.wikipedia.org/wiki/Differentiated_services

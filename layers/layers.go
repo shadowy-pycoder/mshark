@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"net/netip"
 	"unsafe"
 )
 
@@ -45,11 +44,15 @@ var (
 type Layer interface {
 	fmt.Stringer
 	Parse(data []byte) error
-	NextLayer() (layer string, payload []byte)
+	NextLayer() Layer
 	Summary() string
+	Name() string
 }
 
 func parseNextLayerFallback(data []byte) Layer {
+	if len(data) == 0 {
+		return nil
+	}
 	for _, layer := range Layers {
 		next := GetNextLayer(layer)
 		if err := next.Parse(data); err == nil {
@@ -60,6 +63,9 @@ func parseNextLayerFallback(data []byte) Layer {
 }
 
 func parseNextLayerFromBytes(data []byte) Layer {
+	if len(data) == 0 {
+		return nil
+	}
 	buf := make([]byte, 0, len(data))
 	buf = append(buf, data...)
 	var next Layer
@@ -116,13 +122,13 @@ func parseNextLayerFromBytes(data []byte) Layer {
 	return nil
 }
 
-func addrMatch(src, dst *netip.AddrPort, ports []uint16) bool {
+func addrMatch(src, dst *uint16, ports []uint16) bool {
 	var srcPort, dstPort uint16
 	if src != nil {
-		srcPort = src.Port()
+		srcPort = *src
 	}
 	if dst != nil {
-		dstPort = src.Port()
+		dstPort = *dst
 	}
 	for _, port := range ports {
 		if srcPort == port || dstPort == port {
@@ -132,7 +138,10 @@ func addrMatch(src, dst *netip.AddrPort, ports []uint16) bool {
 	return false
 }
 
-func parseNextLayerFromAddress(data []byte, src, dst *netip.AddrPort) Layer {
+func parseNextLayerFromAddress(data []byte, src, dst *uint16) Layer {
+	if len(data) == 0 {
+		return nil
+	}
 	var next Layer
 	switch {
 	case addrMatch(src, dst, []uint16{53, 5353, 853, 5355}):
@@ -157,7 +166,7 @@ func parseNextLayerFromAddress(data []byte, src, dst *netip.AddrPort) Layer {
 	}
 }
 
-func ParseNextLayer(data []byte, src, dst *netip.AddrPort) Layer {
+func ParseNextLayer(data []byte, src, dst *uint16) Layer {
 	buf := make([]byte, 0, len(data))
 	buf = append(buf, data...)
 	var next Layer
@@ -173,7 +182,6 @@ func ParseNextLayer(data []byte, src, dst *netip.AddrPort) Layer {
 }
 
 func GetNextLayer(layer string) Layer {
-	// TODO (shadowy-pycoder): add this to NextLayer, choose by ports, parse, use fallback on error
 	switch layer {
 	case "ETH":
 		return &EthernetFrame{}

@@ -24,4 +24,5 @@ func (s *SNMPMessage) Parse(data []byte) error {
 	return nil
 }
 
-func (s *SNMPMessage) NextLayer() (layer string, payload []byte) { return }
+func (s *SNMPMessage) NextLayer() Layer { return nil }
+func (s *SNMPMessage) Name() string     { return "SNMP" }

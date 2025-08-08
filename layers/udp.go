@@ -86,9 +86,11 @@ func (u *UDPSegment) Parse(data []byte) error {
 	return u.UnmarshalBinary(data)
 }
 
-func (u *UDPSegment) NextLayer() (string, []byte) {
-	return nextAppLayer(u.SrcPort, u.DstPort), u.Payload
+func (u *UDPSegment) NextLayer() Layer {
+	return ParseNextLayer(u.Payload, &u.SrcPort, &u.DstPort)
 }
+
+func (u *UDPSegment) Name() string { return "UDP" }
 
 func CalculateUDPChecksum(data []byte) (uint16, error) {
 	var sum uint16

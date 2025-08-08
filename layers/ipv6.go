@@ -44,7 +44,7 @@ type IPv6Packet struct {
 	HopLimit uint8
 	SrcIP    netip.Addr // The unicast IPv6 address of the sending node.
 	DstIP    netip.Addr // The IPv6 unicast or multicast address of the destination node(s).
-	payload  []byte
+	Payload  []byte
 }
 
 func (p *IPv6Packet) String() string {
@@ -67,7 +67,7 @@ func (p *IPv6Packet) String() string {
 		p.HopLimit,
 		p.SrcIP,
 		p.DstIP,
-		len(p.payload),
+		len(p.Payload),
 	)
 }
 
@@ -92,11 +92,11 @@ func (p *IPv6Packet) Parse(data []byte) error {
 	p.HopLimit = buf[7]
 	p.SrcIP, _ = netip.AddrFromSlice(buf[8:24])
 	p.DstIP, _ = netip.AddrFromSlice(buf[24:headerSizeIPv6])
-	p.payload = buf[headerSizeIPv6:]
+	p.Payload = buf[headerSizeIPv6:]
 	return nil
 }
 
-func (p *IPv6Packet) NextLayer() (string, []byte) {
+func (p *IPv6Packet) nextLayer() string {
 	// https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
 	var layer string
 	switch p.NextHeader {
@@ -109,8 +109,19 @@ func (p *IPv6Packet) NextLayer() (string, []byte) {
 	default:
 		layer = ""
 	}
-	return layer, p.payload
+	return layer
 }
+
+func (p *IPv6Packet) NextLayer() Layer {
+	if next := GetNextLayer(p.nextLayer()); next != nil {
+		if err := next.Parse(p.Payload); err == nil {
+			return next
+		}
+	}
+	return ParseNextLayer(p.Payload, nil, nil)
+}
+
+func (p *IPv6Packet) Name() string { return "IPv6" }
 
 func (p *IPv6Packet) nextHeader() string {
 	// https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers

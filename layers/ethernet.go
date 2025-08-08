@@ -110,10 +110,16 @@ func (ef *EthernetFrame) Parse(data []byte) error {
 	return ef.UnmarshalBinary(data)
 }
 
-// NextLayer returns the name and payload of the next layer protocol based on the EtherType field of the EthernetFrame.
-func (ef *EthernetFrame) NextLayer() (string, []byte) {
-	return ef.EtherType.Desc, ef.Payload
+func (ef *EthernetFrame) NextLayer() Layer {
+	if next := GetNextLayer(ef.EtherType.Desc); next != nil {
+		if err := next.Parse(ef.Payload); err == nil {
+			return next
+		}
+	}
+	return ParseNextLayer(ef.Payload, nil, nil)
 }
+
+func (ef *EthernetFrame) Name() string { return "ETH" }
 
 func ethertypedesc(et EtherType) string {
 	var etdesc string

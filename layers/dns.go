@@ -286,7 +286,9 @@ func (d *DNSMessage) Parse(data []byte) error {
 	return d.UnmarshalBinary(data)
 }
 
-func (d *DNSMessage) NextLayer() (layer string, payload []byte) { return }
+func (d *DNSMessage) NextLayer() Layer { return nil }
+
+func (d *DNSMessage) Name() string { return "DNS" }
 
 func (d *DNSMessage) printRecords() string {
 	var sb strings.Builder

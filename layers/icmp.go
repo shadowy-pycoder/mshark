@@ -67,7 +67,9 @@ func (i *ICMPSegment) Parse(data []byte) error {
 	i.TypeDesc, i.CodeDesc = i.typecode()
 	return nil
 }
-func (i *ICMPSegment) NextLayer() (layer string, payload []byte) { return }
+
+func (i *ICMPSegment) NextLayer() Layer { return nil }
+func (i *ICMPSegment) Name() string     { return "ICMP" }
 
 func (i *ICMPSegment) typecode() (string, string) {
 	// https://en.wikipedia.org/wiki/Internet_Control_Message_Protocol

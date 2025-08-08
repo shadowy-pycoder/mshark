@@ -62,7 +62,7 @@ type TCPSegment struct {
 	// indicating the last urgent data byte.
 	UrgentPointer uint16
 	Options       []byte // The length of this field is determined by the data offset field.
-	payload       []byte
+	Payload       []byte
 }
 
 func (t *TCPSegment) String() string {
@@ -94,7 +94,7 @@ func (t *TCPSegment) String() string {
 		t.UrgentPointer,
 		len(t.Options),
 		t.Options,
-		len(t.payload),
+		len(t.Payload),
 	)
 }
 
@@ -105,7 +105,7 @@ func (t *TCPSegment) Summary() string {
 		t.DstPort,
 		t.Flags,
 		t.WindowSize,
-		len(t.payload),
+		len(t.Payload),
 	)
 }
 
@@ -128,31 +128,12 @@ func (t *TCPSegment) Parse(data []byte) error {
 	t.Checksum = binary.BigEndian.Uint16(buf[16:18])
 	t.UrgentPointer = binary.BigEndian.Uint16(buf[18:headerSizeTCP])
 	t.Options = buf[headerSizeTCP : t.DataOffset<<2]
-	t.payload = buf[t.DataOffset<<2:]
+	t.Payload = buf[t.DataOffset<<2:]
 	return nil
 }
 
-func (t *TCPSegment) NextLayer() (string, []byte) {
-	return nextAppLayer(t.SrcPort, t.DstPort), t.payload
+func (t *TCPSegment) NextLayer() Layer {
+	return ParseNextLayer(t.Payload, &t.SrcPort, &t.DstPort)
 }
 
-func nextAppLayer(src, dst uint16) string {
-	var layer string
-	switch {
-	case src == 20 || dst == 20 || src == 21 || dst == 21:
-		layer = "FTP"
-	case src == 22 || dst == 22:
-		layer = "SSH"
-	case src == 53 || dst == 53:
-		layer = "DNS"
-	case src == 80 || dst == 80:
-		layer = "HTTP"
-	case src == 161 || dst == 161 || src == 162 || dst == 162:
-		layer = "SNMP"
-	case src == 443 || dst == 443:
-		layer = "TLS"
-	default:
-		layer = ""
-	}
-	return layer
-}
+func (t *TCPSegment) Name() string { return "TCP" }

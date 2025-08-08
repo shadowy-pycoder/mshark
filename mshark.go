@@ -94,16 +94,9 @@ func (mw *Writer) WritePacket(timestamp time.Time, data []byte) error {
 	var layerNum int
 	mw.printPacket(next, layerNum)
 	for {
-		name, data := next.NextLayer()
-		if name == "" || data == nil || len(data) == 0 {
-			return nil
-		}
-		next = layers.GetNextLayer(name)
+		next = next.NextLayer()
 		if next == nil {
 			return nil
-		}
-		if err := next.Parse(data); err != nil {
-			return err
 		}
 		layerNum++
 		mw.printPacket(next, layerNum)

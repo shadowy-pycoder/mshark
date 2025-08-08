@@ -121,7 +121,8 @@ func (s *SSHMessage) Parse(data []byte) error {
 	return nil
 }
 
-func (s *SSHMessage) NextLayer() (layer string, payload []byte) { return }
+func (s *SSHMessage) NextLayer() Layer { return nil }
+func (s *SSHMessage) Name() string     { return "SSH" }
 
 // https://www.iana.org/assignments/ssh-parameters/ssh-parameters.xhtml
 func mtypedesc(mtype uint8) string {

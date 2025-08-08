@@ -86,7 +86,8 @@ func (h *HTTPMessage) Parse(data []byte) error {
 	return nil
 }
 
-func (h *HTTPMessage) NextLayer() (layer string, payload []byte) { return }
+func (h *HTTPMessage) NextLayer() Layer { return nil }
+func (h *HTTPMessage) Name() string     { return "HTTP" }
 
 type HTTPRequestWrapper struct {
 	Request HTTPRequest `json:"http_request"`

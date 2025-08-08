@@ -187,7 +187,8 @@ func (ap *ARPPacket) Parse(data []byte) error {
 	return ap.UnmarshalBinary(data)
 }
 
-func (ap *ARPPacket) NextLayer() (layer string, payload []byte) { return }
+func (ap *ARPPacket) NextLayer() Layer { return nil }
+func (ap *ARPPacket) Name() string     { return "ARP" }
 
 func ptypedesc(pt uint16) string {
 	var proto string
