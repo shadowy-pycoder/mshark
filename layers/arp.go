@@ -188,7 +188,7 @@ func (ap *ARPPacket) Parse(data []byte) error {
 }
 
 func (ap *ARPPacket) NextLayer() Layer { return nil }
-func (ap *ARPPacket) Name() string     { return "ARP" }
+func (ap *ARPPacket) Name() LayerName  { return LayerARP }
 
 func ptypedesc(pt uint16) string {
 	var proto string

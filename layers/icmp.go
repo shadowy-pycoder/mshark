@@ -69,7 +69,7 @@ func (i *ICMPSegment) Parse(data []byte) error {
 }
 
 func (i *ICMPSegment) NextLayer() Layer { return nil }
-func (i *ICMPSegment) Name() string     { return "ICMP" }
+func (i *ICMPSegment) Name() LayerName  { return LayerICMP }
 
 func (i *ICMPSegment) typecode() (string, string) {
 	// https://en.wikipedia.org/wiki/Internet_Control_Message_Protocol

@@ -111,7 +111,7 @@ func (ef *EthernetFrame) Parse(data []byte) error {
 }
 
 func (ef *EthernetFrame) NextLayer() Layer {
-	if next := GetNextLayer(ef.EtherType.Desc); next != nil {
+	if next := GetNextLayer(LayerName(ef.EtherType.Desc)); next != nil {
 		if err := next.Parse(ef.Payload); err == nil {
 			return next
 		}
@@ -119,7 +119,7 @@ func (ef *EthernetFrame) NextLayer() Layer {
 	return ParseNextLayer(ef.Payload, nil, nil)
 }
 
-func (ef *EthernetFrame) Name() string { return "ETH" }
+func (ef *EthernetFrame) Name() LayerName { return LayerETH }
 
 func ethertypedesc(et EtherType) string {
 	var etdesc string

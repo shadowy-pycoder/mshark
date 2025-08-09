@@ -120,7 +120,7 @@ func (p *IPv6Packet) nextLayer() string {
 }
 
 func (p *IPv6Packet) NextLayer() Layer {
-	if next := GetNextLayer(p.nextLayer()); next != nil {
+	if next := GetNextLayer(LayerName(p.nextLayer())); next != nil {
 		if err := next.Parse(p.Payload); err == nil {
 			return next
 		}
@@ -128,7 +128,7 @@ func (p *IPv6Packet) NextLayer() Layer {
 	return ParseNextLayer(p.Payload, nil, nil)
 }
 
-func (p *IPv6Packet) Name() string { return "IPv6" }
+func (p *IPv6Packet) Name() LayerName { return LayerIPv6 }
 
 func (p *IPv6Packet) nextHeader() string {
 	// https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers

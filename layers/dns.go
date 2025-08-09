@@ -288,7 +288,7 @@ func (d *DNSMessage) Parse(data []byte) error {
 
 func (d *DNSMessage) NextLayer() Layer { return nil }
 
-func (d *DNSMessage) Name() string { return "DNS" }
+func (d *DNSMessage) Name() LayerName { return LayerDNS }
 
 func (d *DNSMessage) printRecords() string {
 	var sb strings.Builder

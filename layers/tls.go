@@ -582,7 +582,7 @@ func (t *TLSMessage) Parse(data []byte) error {
 }
 
 func (t *TLSMessage) NextLayer() Layer { return nil }
-func (t *TLSMessage) Name() string     { return "TLS" }
+func (t *TLSMessage) Name() LayerName  { return LayerTLS }
 
 func ctdesc(ct uint8) string {
 	// https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-5

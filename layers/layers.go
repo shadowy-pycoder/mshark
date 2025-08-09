@@ -10,21 +10,40 @@ import (
 
 const maxLenSummary = 110
 
-var Layers = []string{
-	"ETH",
-	"IPv4",
-	"IPv6",
-	"ARP",
-	"TCP",
-	"UDP",
-	"ICMP",
-	"ICMPv6",
-	"DNS",
-	"FTP",
-	"HTTP",
-	"SNMP",
-	"SSH",
-	"TLS",
+type LayerName string
+
+const (
+	LayerETH    LayerName = "ETH"
+	LayerIPv4   LayerName = "IPv4"
+	LayerIPv6   LayerName = "IPv6"
+	LayerARP    LayerName = "ARP"
+	LayerTCP    LayerName = "TCP"
+	LayerUDP    LayerName = "UDP"
+	LayerICMP   LayerName = "ICMP"
+	LayerICMPv6 LayerName = "ICMPv6"
+	LayerDNS    LayerName = "DNS"
+	LayerFTP    LayerName = "FTP"
+	LayerHTTP   LayerName = "HTTP"
+	LayerSNMP   LayerName = "SNMP"
+	LayerSSH    LayerName = "SSH"
+	LayerTLS    LayerName = "TLS"
+)
+
+var Layers = []LayerName{
+	LayerETH,
+	LayerIPv4,
+	LayerIPv6,
+	LayerTLS,
+	LayerHTTP,
+	LayerDNS,
+	LayerARP,
+	LayerTCP,
+	LayerUDP,
+	LayerICMP,
+	LayerICMPv6,
+	LayerSNMP,
+	LayerSSH,
+	LayerFTP,
 }
 
 var (
@@ -46,7 +65,7 @@ type Layer interface {
 	Parse(data []byte) error
 	NextLayer() Layer
 	Summary() string
-	Name() string
+	Name() LayerName
 }
 
 func parseNextLayerFallback(data []byte) Layer {
@@ -71,25 +90,25 @@ func parseNextLayerFromBytes(data []byte) Layer {
 	var next Layer
 	firstByte := buf[0]
 	if firstByte >= 0x45 && firstByte <= 0x4F {
-		next = GetNextLayer("IPv4")
+		next = GetNextLayer(LayerIPv4)
 		if err := next.Parse(buf); err == nil {
 			return next
 		}
 	}
 	if firstByte>>4 == 6 {
-		next = GetNextLayer("IPv6")
+		next = GetNextLayer(LayerIPv6)
 		if err := next.Parse(buf); err == nil {
 			return next
 		}
 	}
 	if firstByte == HandshakeTLSVal {
-		next = GetNextLayer("TLS")
+		next = GetNextLayer(LayerTLS)
 		if err := next.Parse(buf); err == nil {
 			return next
 		}
 	}
 	if firstByte == 0x30 {
-		next = GetNextLayer("SNMP")
+		next = GetNextLayer(LayerSNMP)
 		if err := next.Parse(buf); err == nil {
 			return next
 		}
@@ -98,7 +117,7 @@ func parseNextLayerFromBytes(data []byte) Layer {
 		b1 := binary.BigEndian.Uint16(buf[0:2])
 		b2 := binary.BigEndian.Uint16(buf[2:4])
 		if b1 == 1 && (b2 == 0x0800 || b2 == 0x86dd) {
-			next = GetNextLayer("ARP")
+			next = GetNextLayer(LayerARP)
 			if err := next.Parse(buf); err == nil {
 				return next
 			}
@@ -107,20 +126,20 @@ func parseNextLayerFromBytes(data []byte) Layer {
 	if len(buf) > 15 {
 		b1 := binary.BigEndian.Uint16(buf[12:14])
 		if b1 == 0x0806 || b1 == 0x0800 || b1 == 0x86dd {
-			next = GetNextLayer("ETH")
+			next = GetNextLayer(LayerETH)
 			if err := next.Parse(buf); err == nil {
 				return next
 			}
 		}
 	}
 	if bytes.Contains(buf, protohttp10) || bytes.Contains(buf, protohttp11) {
-		next = GetNextLayer("HTTP")
+		next = GetNextLayer(LayerHTTP)
 		if err := next.Parse(buf); err == nil {
 			return next
 		}
 	}
 	if bytes.Contains(buf, protoSSH) {
-		next = GetNextLayer("SSH")
+		next = GetNextLayer(LayerSSH)
 		if err := next.Parse(buf); err == nil {
 			return next
 		}
@@ -151,17 +170,17 @@ func parseNextLayerFromPorts(data []byte, src, dst *uint16) Layer {
 	var next Layer
 	switch {
 	case addrMatch(src, dst, []uint16{53, 5353, 853, 5355}):
-		next = GetNextLayer("DNS")
+		next = GetNextLayer(LayerDNS)
 	case addrMatch(src, dst, []uint16{80, 8080, 8000, 8888, 81, 591, 5911}):
-		next = GetNextLayer("HTTP")
+		next = GetNextLayer(LayerHTTP)
 	case addrMatch(src, dst, []uint16{161, 162, 10161, 10162, 1161, 2161}):
-		next = GetNextLayer("SNMP")
+		next = GetNextLayer(LayerSNMP)
 	case addrMatch(src, dst, []uint16{21, 20, 2121, 8021}):
-		next = GetNextLayer("FTP")
+		next = GetNextLayer(LayerFTP)
 	case addrMatch(src, dst, []uint16{22, 2222, 2200, 222, 2022}):
-		next = GetNextLayer("SSH")
+		next = GetNextLayer(LayerSSH)
 	case addrMatch(src, dst, []uint16{443, 465, 993, 995, 8443, 9443, 10443, 8444, 5228}):
-		next = GetNextLayer("TLS")
+		next = GetNextLayer(LayerTLS)
 	default:
 		return nil
 	}
@@ -187,35 +206,35 @@ func ParseNextLayer(data []byte, src, dst *uint16) Layer {
 	return parseNextLayerFallback(buf)
 }
 
-func GetNextLayer(layer string) Layer {
+func GetNextLayer(layer LayerName) Layer {
 	switch layer {
-	case "ETH":
+	case LayerETH:
 		return &EthernetFrame{}
-	case "IPv4":
+	case LayerIPv4:
 		return &IPv4Packet{}
-	case "IPv6":
+	case LayerIPv6:
 		return &IPv6Packet{}
-	case "ARP":
+	case LayerARP:
 		return &ARPPacket{}
-	case "TCP":
+	case LayerTCP:
 		return &TCPSegment{}
-	case "UDP":
+	case LayerUDP:
 		return &UDPSegment{}
-	case "ICMP":
+	case LayerICMP:
 		return &ICMPSegment{}
-	case "ICMPv6":
+	case LayerICMPv6:
 		return &ICMPv6Segment{}
-	case "DNS":
+	case LayerDNS:
 		return &DNSMessage{}
-	case "FTP":
+	case LayerFTP:
 		return &FTPMessage{}
-	case "HTTP":
+	case LayerHTTP:
 		return &HTTPMessage{}
-	case "SNMP":
+	case LayerSNMP:
 		return &SNMPMessage{}
-	case "SSH":
+	case LayerSSH:
 		return &SSHMessage{}
-	case "TLS":
+	case LayerTLS:
 		return &TLSMessage{}
 	default:
 		return nil

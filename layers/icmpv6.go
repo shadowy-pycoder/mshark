@@ -71,7 +71,7 @@ func (i *ICMPv6Segment) Parse(data []byte) error {
 }
 
 func (i *ICMPv6Segment) NextLayer() Layer { return nil }
-func (i *ICMPv6Segment) Name() string     { return "ICMPv6" }
+func (i *ICMPv6Segment) Name() LayerName  { return LayerICMPv6 }
 
 func (i *ICMPv6Segment) typecode() (string, string) {
 	// https://en.wikipedia.org/wiki/ICMPv6

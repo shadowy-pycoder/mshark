@@ -42,4 +42,4 @@ func (f *FTPMessage) Parse(data []byte) error {
 }
 
 func (f *FTPMessage) NextLayer() Layer { return nil }
-func (f *FTPMessage) Name() string     { return "FTP" }
+func (f *FTPMessage) Name() LayerName  { return LayerFTP }

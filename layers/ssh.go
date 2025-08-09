@@ -132,7 +132,7 @@ func (s *SSHMessage) Parse(data []byte) error {
 }
 
 func (s *SSHMessage) NextLayer() Layer { return nil }
-func (s *SSHMessage) Name() string     { return "SSH" }
+func (s *SSHMessage) Name() LayerName  { return LayerSSH }
 
 // https://www.iana.org/assignments/ssh-parameters/ssh-parameters.xhtml
 func mtypedesc(mtype uint8) string {

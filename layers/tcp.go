@@ -140,4 +140,4 @@ func (t *TCPSegment) NextLayer() Layer {
 	return ParseNextLayer(t.Payload, &t.SrcPort, &t.DstPort)
 }
 
-func (t *TCPSegment) Name() string { return "TCP" }
+func (t *TCPSegment) Name() LayerName { return LayerTCP }
