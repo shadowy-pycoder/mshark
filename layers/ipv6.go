@@ -120,7 +120,7 @@ func (p *IPv6Packet) nextLayer() string {
 }
 
 func (p *IPv6Packet) NextLayer() Layer {
-	if next := GetNextLayer(LayerName(p.nextLayer())); next != nil {
+	if next := GetLayer(LayerName(p.nextLayer())); next != nil {
 		if err := next.Parse(p.Payload); err == nil {
 			return next
 		}

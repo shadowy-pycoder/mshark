@@ -111,7 +111,7 @@ func (ef *EthernetFrame) Parse(data []byte) error {
 }
 
 func (ef *EthernetFrame) NextLayer() Layer {
-	if next := GetNextLayer(LayerName(ef.EtherType.Desc)); next != nil {
+	if next := GetLayer(LayerName(ef.EtherType.Desc)); next != nil {
 		if err := next.Parse(ef.Payload); err == nil {
 			return next
 		}

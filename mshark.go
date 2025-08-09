@@ -84,7 +84,7 @@ func (mw *Writer) WritePacket(timestamp time.Time, data []byte) error {
 	mw.packets++
 	fmt.Fprintf(mw.w, "- Packet: %d Timestamp: %s\n", mw.packets, timestamp.Format("2006-01-02T15:04:05.000000-0700"))
 	fmt.Fprintln(mw.w, packetDelimeter)
-	next := layers.GetNextLayer(layers.LayerETH)
+	next := layers.GetLayer(layers.LayerETH)
 	if next == nil {
 		return nil
 	}

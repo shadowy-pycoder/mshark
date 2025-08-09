@@ -73,7 +73,7 @@ func parseNextLayerFallback(data []byte) Layer {
 		return nil
 	}
 	for _, layer := range Layers {
-		next := GetNextLayer(layer)
+		next := GetLayer(layer)
 		if err := next.Parse(data); err == nil {
 			return next
 		}
@@ -90,25 +90,25 @@ func parseNextLayerFromBytes(data []byte) Layer {
 	var next Layer
 	firstByte := buf[0]
 	if firstByte >= 0x45 && firstByte <= 0x4F {
-		next = GetNextLayer(LayerIPv4)
+		next = GetLayer(LayerIPv4)
 		if err := next.Parse(buf); err == nil {
 			return next
 		}
 	}
 	if firstByte>>4 == 6 {
-		next = GetNextLayer(LayerIPv6)
+		next = GetLayer(LayerIPv6)
 		if err := next.Parse(buf); err == nil {
 			return next
 		}
 	}
 	if firstByte == HandshakeTLSVal {
-		next = GetNextLayer(LayerTLS)
+		next = GetLayer(LayerTLS)
 		if err := next.Parse(buf); err == nil {
 			return next
 		}
 	}
-	if firstByte == 0x30 {
-		next = GetNextLayer(LayerSNMP)
+	if checkFTP(buf) {
+		next = GetLayer(LayerFTP)
 		if err := next.Parse(buf); err == nil {
 			return next
 		}
@@ -117,29 +117,35 @@ func parseNextLayerFromBytes(data []byte) Layer {
 		b1 := binary.BigEndian.Uint16(buf[0:2])
 		b2 := binary.BigEndian.Uint16(buf[2:4])
 		if b1 == 1 && (b2 == 0x0800 || b2 == 0x86dd) {
-			next = GetNextLayer(LayerARP)
+			next = GetLayer(LayerARP)
 			if err := next.Parse(buf); err == nil {
 				return next
 			}
 		}
 	}
+	if checkSNMP(buf) {
+		next = GetLayer(LayerSNMP)
+		if err := next.Parse(buf); err == nil {
+			return next
+		}
+	}
 	if len(buf) > 15 {
 		b1 := binary.BigEndian.Uint16(buf[12:14])
 		if b1 == 0x0806 || b1 == 0x0800 || b1 == 0x86dd {
-			next = GetNextLayer(LayerETH)
+			next = GetLayer(LayerETH)
 			if err := next.Parse(buf); err == nil {
 				return next
 			}
 		}
 	}
 	if bytes.Contains(buf, protohttp10) || bytes.Contains(buf, protohttp11) {
-		next = GetNextLayer(LayerHTTP)
+		next = GetLayer(LayerHTTP)
 		if err := next.Parse(buf); err == nil {
 			return next
 		}
 	}
 	if bytes.Contains(buf, protoSSH) {
-		next = GetNextLayer(LayerSSH)
+		next = GetLayer(LayerSSH)
 		if err := next.Parse(buf); err == nil {
 			return next
 		}
@@ -170,17 +176,17 @@ func parseNextLayerFromPorts(data []byte, src, dst *uint16) Layer {
 	var next Layer
 	switch {
 	case addrMatch(src, dst, []uint16{53, 5353, 853, 5355}):
-		next = GetNextLayer(LayerDNS)
+		next = GetLayer(LayerDNS)
 	case addrMatch(src, dst, []uint16{80, 8080, 8000, 8888, 81, 591, 5911}):
-		next = GetNextLayer(LayerHTTP)
+		next = GetLayer(LayerHTTP)
 	case addrMatch(src, dst, []uint16{161, 162, 10161, 10162, 1161, 2161}):
-		next = GetNextLayer(LayerSNMP)
+		next = GetLayer(LayerSNMP)
 	case addrMatch(src, dst, []uint16{21, 20, 2121, 8021}):
-		next = GetNextLayer(LayerFTP)
+		next = GetLayer(LayerFTP)
 	case addrMatch(src, dst, []uint16{22, 2222, 2200, 222, 2022}):
-		next = GetNextLayer(LayerSSH)
+		next = GetLayer(LayerSSH)
 	case addrMatch(src, dst, []uint16{443, 465, 993, 995, 8443, 9443, 10443, 8444, 5228}):
-		next = GetNextLayer(LayerTLS)
+		next = GetLayer(LayerTLS)
 	default:
 		return nil
 	}
@@ -206,7 +212,7 @@ func ParseNextLayer(data []byte, src, dst *uint16) Layer {
 	return parseNextLayerFallback(buf)
 }
 
-func GetNextLayer(layer LayerName) Layer {
+func GetLayer(layer LayerName) Layer {
 	switch layer {
 	case LayerETH:
 		return &EthernetFrame{}
@@ -261,4 +267,12 @@ func add16WithCarryWrapAround(x, y uint16) uint16 {
 	sum32 := uint32(x) + uint32(y)
 	sum32 = (sum32 & 0xFFFF) + (sum32 >> 16)
 	return uint16(sum32)
+}
+
+func isDigit(b byte) bool {
+	return b >= '0' && b <= '9'
+}
+
+func isUpper(b byte) bool {
+	return b >= 'A' && b <= 'Z'
 }

@@ -218,7 +218,7 @@ func protodesc(proto IPProto) string {
 }
 
 func (p *IPv4Packet) NextLayer() Layer {
-	if next := GetNextLayer(LayerName(p.Protocol.Desc)); next != nil {
+	if next := GetLayer(LayerName(p.Protocol.Desc)); next != nil {
 		if err := next.Parse(p.Payload); err == nil {
 			return next
 		}

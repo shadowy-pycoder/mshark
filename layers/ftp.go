@@ -23,6 +23,9 @@ func (f *FTPMessage) Summary() string {
 func (f *FTPMessage) Parse(data []byte) error {
 	buf := make([]byte, 0, len(data))
 	buf = append(buf, data...)
+	if !checkFTP(buf) {
+		return fmt.Errorf("malformed ftp message")
+	}
 	f.summary = nil
 	f.data = nil
 	sp := bytes.Split(buf, crlf)
@@ -43,3 +46,9 @@ func (f *FTPMessage) Parse(data []byte) error {
 
 func (f *FTPMessage) NextLayer() Layer { return nil }
 func (f *FTPMessage) Name() LayerName  { return LayerFTP }
+
+func checkFTP(data []byte) bool {
+	return (len(data) >= 4 && isDigit(data[0]) && isDigit(data[1]) &&
+		isDigit(data[2]) && (data[3] == ' ' || data[3] == '-')) ||
+		(len(data) >= 3 && isUpper(data[0]) && isUpper(data[1]) && isUpper(data[2]))
+}

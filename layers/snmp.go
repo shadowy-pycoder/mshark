@@ -18,14 +18,18 @@ func (s *SNMPMessage) Summary() string {
 }
 
 func (s *SNMPMessage) Parse(data []byte) error {
-	if data[0] != 0x30 {
-		return fmt.Errorf("not ASN.1 SEQUENCE")
-	}
 	buf := make([]byte, 0, len(data))
 	buf = append(buf, data...)
+	if !checkSNMP(buf) {
+		return fmt.Errorf("not ASN.1 SEQUENCE")
+	}
 	s.Payload = buf
 	return nil
 }
 
 func (s *SNMPMessage) NextLayer() Layer { return nil }
 func (s *SNMPMessage) Name() LayerName  { return LayerSNMP }
+
+func checkSNMP(data []byte) bool {
+	return len(data) > 6 && data[0] == 0x30 && (data[2] == 0x02 || data[2] == 0x04)
+}
