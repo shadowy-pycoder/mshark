@@ -11,13 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mdlayher/packet"
-	"github.com/packetcap/go-pcap/filter"
 	"github.com/shadowy-pycoder/mshark/layers"
-	"golang.org/x/net/bpf"
+	"github.com/shadowy-pycoder/mshark/network"
 )
-
-const unixEthPAll int = 0x03
 
 var colorMap = map[int]string{ // TODO (shadowy-pycoder): add colors from shadowy-pycoder/colors
 	0: "\033[37m",
@@ -144,39 +140,15 @@ func (mw *Writer) WriteHeader(c *Config) error {
 // OpenLive opens a live capture based on the given configuration and writes
 // all captured packets to the given PacketWriters.
 func OpenLive(conf *Config, pw ...PacketWriter) error {
-	packetcfg := packet.Config{}
-
-	// setting up filter
-	if conf.Expr != "" {
-		e := filter.NewExpression(conf.Expr)
-		f := e.Compile()
-		instructions, err := f.Compile()
-		if err != nil {
-			return fmt.Errorf("failed to compile filter into instructions: %v", err)
-		}
-		raw, err := bpf.Assemble(instructions)
-		if err != nil {
-			return fmt.Errorf("bpf assembly failed: %v", err)
-		}
-		packetcfg.Filter = raw
-	}
-
-	// opening connection
-	c, err := packet.Listen(conf.Device, packet.Raw, unixEthPAll, &packetcfg)
-	if err != nil {
-		if errors.Is(err, os.ErrPermission) {
-			return fmt.Errorf("permission denied (try setting CAP_NET_RAW capability): %v", err)
-		}
-		return fmt.Errorf("failed to listen: %v", err)
-	}
-
+	lc := &network.ListenConfig{Device: conf.Device, FilterExpr: conf.Expr}
 	// setting promisc mode
 	if conf.Device.Name != "any" {
-		if err := c.SetPromiscuous(conf.Promisc); err != nil {
-			return fmt.Errorf("unable to set promiscuous mode: %v", err)
-		}
+		lc.Promiscuous = &conf.Promisc
 	}
-
+	c, err := network.ListenPacket(lc)
+	if err != nil {
+		return err
+	}
 	// timeout
 	if conf.Timeout > 0 {
 		if err := c.SetDeadline(time.Now().Add(conf.Timeout)); err != nil {

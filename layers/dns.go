@@ -3,30 +3,29 @@ package layers
 import (
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/netip"
 	"strings"
 )
 
-// TODO (shadowy-pycoder): add MarshalJSON
-
 const headerSizeDNS = 12
 
 type DNSFlags struct {
-	Raw        uint16
-	QR         uint8  // Indicates if the message is a query (0) or a reply (1).
-	QRDesc     string // Query (0) or Reply (1)
-	OPCode     uint8  // https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-5
-	OPCodeDesc string
-	AA         uint8 // Authoritative Answer, in a response, indicates if the DNS server is authoritative for the queried hostname.
-	TC         uint8 // TrunCation, indicates that this message was truncated due to excessive length.
-	RD         uint8 // Recursion Desired, indicates if the client means a recursive query.
-	RA         uint8 // Recursion Available, in a response, indicates if the replying DNS server supports recursion.
-	Z          uint8 // Zero, reserved for future use.
-	AU         uint8 // Indicates if answer/authority portion was authenticated by the server.
-	NA         uint8 // Indicates if non-authenticated data is accepatable.
-	RCode      uint8 // https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-6
-	RCodeDesc  string
+	Raw        uint16 `json:"raw"`
+	QR         uint8  `json:"qr"`     // Indicates if the message is a query (0) or a reply (1).
+	QRDesc     string `json:"qrdesc"` // Query (0) or Reply (1)
+	OPCode     uint8  `json:"opcode"` // https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-5
+	OPCodeDesc string `json:"opcodedesc"`
+	AA         uint8  `json:"aa"`    // Authoritative Answer, in a response, indicates if the DNS server is authoritative for the queried hostname.
+	TC         uint8  `json:"tc"`    // TrunCation, indicates that this message was truncated due to excessive length.
+	RD         uint8  `json:"rd"`    // Recursion Desired, indicates if the client means a recursive query.
+	RA         uint8  `json:"ra"`    // Recursion Available, in a response, indicates if the replying DNS server supports recursion.
+	Z          uint8  `json:"z"`     // Zero, reserved for future use.
+	AU         uint8  `json:"au"`    // Indicates if answer/authority portion was authenticated by the server.
+	NA         uint8  `json:"na"`    // Indicates if non-authenticated data is accepatable.
+	RCode      uint8  `json:"rcode"` // https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-6
+	RCodeDesc  string `json:"rcodedesc"`
 }
 
 func (df *DNSFlags) String() string {
@@ -173,16 +172,16 @@ func rcdesc(rcode uint8) string {
 }
 
 type DNSMessage struct {
-	TransactionID uint16    // Used for matching response to queries.
-	Flags         *DNSFlags // Flags specify the requested operation and a response code.
-	QDCount       uint16    // Count of entries in the queries section.
-	ANCount       uint16    //  Count of entries in the answers section.
-	NSCount       uint16    // Count of entries in the authority section.
-	ARCount       uint16    // Count of entries in the additional section.
-	Questions     []*QueryEntry
-	AnswerRRs     []*ResourceRecord
-	AuthorityRRs  []*ResourceRecord
-	AdditionalRRs []*ResourceRecord
+	TransactionID uint16            `json:"transaction-id"`       // Used for matching response to queries.
+	Flags         *DNSFlags         `json:"flags,omitempty"`      // Flags specify the requested operation and a response code.
+	QDCount       uint16            `json:"questions-count"`      // Count of entries in the queries section.
+	ANCount       uint16            `json:"answer-rrs-count"`     //  Count of entries in the answers section.
+	NSCount       uint16            `json:"authority-rrs-count"`  // Count of entries in the authority section.
+	ARCount       uint16            `json:"additional-rrs-count"` // Count of entries in the additional section.
+	Questions     []*QueryEntry     `json:"questions,omitempty"`
+	AnswerRRs     []*ResourceRecord `json:"answers,omitempty"`
+	AuthorityRRs  []*ResourceRecord `json:"authoritative-nameservers,omitempty"`
+	AdditionalRRs []*ResourceRecord `json:"additional-records,omitempty"`
 }
 
 func (d *DNSMessage) String() string {
@@ -313,15 +312,31 @@ func (d *DNSMessage) printRecords() string {
 	if d.ARCount > 0 {
 		sb.WriteString("- Additional records:\n")
 		for _, rec := range d.AdditionalRRs {
-			sb.WriteString(rec.String())
+			sb.WriteString(strings.TrimSuffix(rec.String(), "\n"))
 		}
 	}
-	return strings.TrimSuffix(sb.String(), "\n")
+	return sb.String()
+}
+
+type dnsMessageAlias DNSMessage
+
+type dnsQueryWrapper struct {
+	Query *dnsMessageAlias `json:"dns_query"`
+}
+type dnsReplyWrapper struct {
+	Reply *dnsMessageAlias `json:"dns_reply"`
+}
+
+func (d *DNSMessage) MarshalJSON() ([]byte, error) {
+	if d.Flags.QR == 0 {
+		return json.Marshal(&dnsQueryWrapper{Query: (*dnsMessageAlias)(d)})
+	}
+	return json.Marshal(&dnsReplyWrapper{Reply: (*dnsMessageAlias)(d)})
 }
 
 type RecordClass struct {
-	Name string
-	Val  uint16
+	Name string `json:"name"`
+	Val  uint16 `json:"val"`
 }
 
 func (c *RecordClass) String() string {
@@ -351,8 +366,8 @@ func className(cls uint16) string {
 }
 
 type RecordType struct {
-	Name string
-	Val  uint16
+	Name string `json:"name"`
+	Val  uint16 `json:"val"`
 }
 
 func (rt *RecordType) String() string {
@@ -391,12 +406,12 @@ func typeName(typ uint16) string {
 }
 
 type ResourceRecord struct {
-	Name     string       // Name of the node to which this record pertains.
-	Type     *RecordType  // Type of RR in numeric form.
-	Class    *RecordClass // Class code.
-	TTL      uint32       // Count of seconds that the RR stays valid.
-	RDLength uint16       // Length of RData field (specified in octets).
-	RData    fmt.Stringer // Additional RR-specific data.
+	Name     string       `json:"name"`         // Name of the node to which this record pertains.
+	Type     *RecordType  `json:"record-type"`  // Type of RR in numeric form.
+	Class    *RecordClass `json:"record-class"` // Class code.
+	TTL      uint32       `json:"ttl"`          // Count of seconds that the RR stays valid.
+	RDLength uint16       `json:"rdata-length"` // Length of RData field (specified in octets).
+	RData    fmt.Stringer `json:"rdata"`        // Additional RR-specific data.
 }
 
 func (rt *ResourceRecord) String() string {
@@ -453,9 +468,9 @@ func (rt *ResourceRecord) Summary() string {
 }
 
 type QueryEntry struct {
-	Name  string       // Name of the node to which this record pertains.
-	Type  *RecordType  // Type of RR in numeric form.
-	Class *RecordClass // Class code.
+	Name  string       `json:"name"`         // Name of the node to which this record pertains.
+	Type  *RecordType  `json:"record-type"`  // Type of RR in numeric form.
+	Class *RecordClass `json:"record-class"` // Class code.
 }
 
 func (qe *QueryEntry) String() string {
@@ -467,7 +482,7 @@ func (qe *QueryEntry) String() string {
 }
 
 type RDataA struct {
-	Address netip.Addr
+	Address netip.Addr `json:"address"`
 }
 
 func (d *RDataA) String() string {
@@ -475,7 +490,7 @@ func (d *RDataA) String() string {
 }
 
 type RDataNS struct {
-	NsdName string
+	NsdName string `json:"ns"`
 }
 
 func (d *RDataNS) String() string {
@@ -483,7 +498,7 @@ func (d *RDataNS) String() string {
 }
 
 type RDataCNAME struct {
-	CName string
+	CName string `json:"cname"`
 }
 
 func (d *RDataCNAME) String() string {
@@ -491,13 +506,13 @@ func (d *RDataCNAME) String() string {
 }
 
 type RDataSOA struct {
-	PrimaryNS            string
-	RespAuthorityMailbox string
-	SerialNumber         uint32
-	RefreshInterval      uint32
-	RetryInterval        uint32
-	ExpireLimit          uint32
-	MinimumTTL           uint32
+	PrimaryNS            string `json:"primary-nameserver"`
+	RespAuthorityMailbox string `json:"responsible-authority-mailbox"`
+	SerialNumber         uint32 `json:"serial-number"`
+	RefreshInterval      uint32 `json:"refresh-interval"`
+	RetryInterval        uint32 `json:"retry-interval"`
+	ExpireLimit          uint32 `json:"expire-limit"`
+	MinimumTTL           uint32 `json:"minimum-ttl"`
 }
 
 func (d *RDataSOA) String() string {
@@ -518,8 +533,8 @@ func (d *RDataSOA) String() string {
 }
 
 type RDataMX struct {
-	Preference uint16
-	Exchange   string
+	Preference uint16 `json:"preference"`
+	Exchange   string `json:"exchange"`
 }
 
 func (d *RDataMX) String() string {
@@ -527,7 +542,7 @@ func (d *RDataMX) String() string {
 }
 
 type RDataTXT struct {
-	TxtData string
+	TxtData string `json:"txt-data"`
 }
 
 func (d *RDataTXT) String() string {
@@ -535,7 +550,7 @@ func (d *RDataTXT) String() string {
 }
 
 type RDataAAAA struct {
-	Address netip.Addr
+	Address netip.Addr `json:"address"`
 }
 
 func (d *RDataAAAA) String() string {
@@ -543,11 +558,11 @@ func (d *RDataAAAA) String() string {
 }
 
 type RDataOPT struct {
-	UDPPayloadSize     uint16
-	HigherBitsExtRCode uint8
-	EDNSVer            uint8
-	Z                  uint16
-	DataLen            uint16
+	UDPPayloadSize     uint16 `json:"udp-payload-size"`
+	HigherBitsExtRCode uint8  `json:"higer-bits-in-extended-rcode"`
+	EDNSVer            uint8  `json:"edns0-version"`
+	Z                  uint16 `json:"z"`
+	DataLen            uint16 `json:"data-length"`
 }
 
 func (d *RDataOPT) String() string {
@@ -565,8 +580,8 @@ func (d *RDataOPT) String() string {
 }
 
 type SvcParamKey struct {
-	Val  uint16
-	Desc string
+	Val  uint16 `json:"val"`
+	Desc string `json:"desc"`
 }
 
 // https://www.iana.org/assignments/dns-svcb/dns-svcb.xhtml
@@ -608,9 +623,9 @@ func (spk *SvcParamKey) String() string {
 }
 
 type SvcParam struct {
-	Key    *SvcParamKey
-	Length uint16
-	Value  []byte // TODO: add proper parsing
+	Key    *SvcParamKey `json:"svc-param-key"`
+	Length uint16       `json:"svc-param-value-length"`
+	Value  []byte       `json:"svc-param-value"` // TODO: add proper parsing
 }
 
 func newSvcParam(data []byte) (*SvcParam, []byte, error) {
@@ -639,10 +654,10 @@ func (sp *SvcParam) String() string {
 }
 
 type RDataHTTPS struct {
-	SvcPriority uint16
-	Length      int
-	TargetName  string
-	SvcParams   []*SvcParam
+	SvcPriority uint16      `json:"svc-priority"`
+	Length      int         `json:"length"`
+	TargetName  string      `json:"target-name"`
+	SvcParams   []*SvcParam `json:"svc-params"`
 }
 
 func (d *RDataHTTPS) printSvcParams() string {
@@ -668,7 +683,7 @@ func (d *RDataHTTPS) String() string {
 }
 
 type RDataUnknown struct {
-	Data string
+	Data string `json:"data"`
 }
 
 func (d *RDataUnknown) String() string {
@@ -681,7 +696,7 @@ func (d *RDataUnknown) String() string {
 func extractDomain(payload, tail []byte) (string, []byte, error) {
 	// see https://brunoscheufler.com/blog/2024-05-12-building-a-dns-message-parser#domain-names
 	var domainName string
-	for {
+	for len(tail) > 0 {
 		blen := tail[0]
 		if blen>>6 == 0b11 {
 			if len(tail) < 2 {

@@ -128,7 +128,7 @@ func (t *TCPSegment) Parse(data []byte) error {
 	t.Checksum = binary.BigEndian.Uint16(buf[16:18])
 	t.UrgentPointer = binary.BigEndian.Uint16(buf[18:headerSizeTCP])
 	offset := t.DataOffset << 2
-	if len(buf) < int(offset) {
+	if len(buf) < int(offset) || int(offset) < headerSizeTCP {
 		return ErrSliceBounds
 	}
 	t.Options = buf[headerSizeTCP:offset]

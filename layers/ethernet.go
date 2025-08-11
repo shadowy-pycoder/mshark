@@ -98,6 +98,9 @@ func (ef *EthernetFrame) UnmarshalBinary(data []byte) error {
 	ef.SrcMAC = net.HardwareAddr(buf[6:12])
 	et := EtherType(binary.BigEndian.Uint16(buf[12:14]))
 	etdesc := ethertypedesc(et)
+	if etdesc == "Unknown" {
+		return fmt.Errorf("failed determining Ethernet type")
+	}
 	ef.EtherType = &EthernetType{Val: et, Desc: etdesc}
 	ef.Payload = buf[headerSizeEthernet:]
 	ef.DstVendor = oui.VendorWithMAC(ef.DstMAC)
@@ -131,7 +134,7 @@ func ethertypedesc(et EtherType) string {
 	case EtherTypeIPv6:
 		etdesc = "IPv6"
 	default:
-		etdesc = ""
+		etdesc = "Unknown"
 	}
 	return etdesc
 }

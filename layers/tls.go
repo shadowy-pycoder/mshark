@@ -86,11 +86,17 @@ type ServerName struct {
 }
 
 func (sn *ServerName) Parse(data []byte) error {
+	if len(data) < 9 {
+		return ErrSliceBounds
+	}
 	sn.Type = binary.BigEndian.Uint16(data[0:2])
 	sn.Length = binary.BigEndian.Uint16(data[2:4])
 	sn.SNListLength = binary.BigEndian.Uint16(data[4:6])
 	sn.SNType = data[6]
 	sn.SNNameLength = binary.BigEndian.Uint16(data[7:9])
+	if int(9+sn.SNNameLength) > len(data) {
+		return ErrSliceBounds
+	}
 	sn.SNName = string(data[9 : 9+sn.SNNameLength])
 	return nil
 }
@@ -545,10 +551,13 @@ func (t *TLSMessage) Parse(data []byte) error {
 	if len(buf) < headerSizeTLS {
 		return ErrTLSTooShort
 	}
-	for len(buf) > 0 {
+	for i := 0; len(buf) > 0; i++ {
 		ctype := buf[0]
 		ctdesc := ctdesc(ctype)
 		if ctdesc == "Unknown" {
+			if i == 0 {
+				return fmt.Errorf("unknown content type")
+			}
 			break
 		}
 		if len(buf) < 3 {
@@ -557,6 +566,9 @@ func (t *TLSMessage) Parse(data []byte) error {
 		ver := binary.BigEndian.Uint16(buf[1:3])
 		verdesc := verdesc(ver)
 		if verdesc == "Unknown" {
+			if i == 0 {
+				return fmt.Errorf("unknown version")
+			}
 			break
 		}
 		if len(buf) < headerSizeTLS {

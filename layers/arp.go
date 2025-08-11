@@ -167,12 +167,21 @@ func (ap *ARPPacket) UnmarshalBinary(data []byte) error {
 	hoffset := 8 + ap.Hlen
 	ap.SenderMAC = net.HardwareAddr(buf[8:hoffset])
 	poffset := hoffset + ap.Plen
+	if int(poffset) > len(buf) {
+		return ErrSliceBounds
+	}
 	var ok bool
 	ap.SenderIP, ok = netip.AddrFromSlice(buf[hoffset:poffset])
 	if !ok {
 		return fmt.Errorf("failed parsing sender IP address")
 	}
+	if int(poffset+ap.Hlen) > len(buf) {
+		return ErrSliceBounds
+	}
 	ap.TargetMAC = net.HardwareAddr(buf[poffset : poffset+ap.Hlen])
+	if int(poffset+ap.Hlen+ap.Plen) > len(buf) {
+		return ErrSliceBounds
+	}
 	ap.TargetIP, ok = netip.AddrFromSlice(buf[poffset+ap.Hlen : poffset+ap.Hlen+ap.Plen])
 	if !ok {
 		return fmt.Errorf("failed parsing target IP address")

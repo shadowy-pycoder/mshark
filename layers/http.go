@@ -64,7 +64,7 @@ func (h *HTTPMessage) Parse(data []byte) error {
 	if !bytes.Contains(buf, protohttp10) && !bytes.Contains(buf, protohttp11) {
 		h.Request = nil
 		h.Response = nil
-		return nil
+		return fmt.Errorf("message does not contain protocol")
 	}
 	reader := bufio.NewReader(bytes.NewReader(buf))
 	if bytes.HasPrefix(buf, protohttp11) || bytes.HasPrefix(buf, protohttp10) {
@@ -90,7 +90,7 @@ func (h *HTTPMessage) NextLayer() Layer { return nil }
 func (h *HTTPMessage) Name() LayerName  { return LayerHTTP }
 
 type HTTPRequestWrapper struct {
-	Request HTTPRequest `json:"http_request"`
+	Request *HTTPRequest `json:"http_request"`
 }
 
 type HTTPRequest struct {
@@ -103,7 +103,7 @@ type HTTPRequest struct {
 }
 
 type HTTPResponseWrapper struct {
-	Response HTTPResponse `json:"http_response"`
+	Response *HTTPResponse `json:"http_response"`
 }
 
 type HTTPResponse struct {
@@ -115,7 +115,7 @@ type HTTPResponse struct {
 
 func (h *HTTPMessage) MarshalJSON() ([]byte, error) {
 	if h.Request != nil {
-		return json.Marshal(&HTTPRequestWrapper{Request: HTTPRequest{
+		return json.Marshal(&HTTPRequestWrapper{Request: &HTTPRequest{
 			Host:          h.Request.Host,
 			URI:           h.Request.RequestURI,
 			Method:        h.Request.Method,
@@ -124,7 +124,7 @@ func (h *HTTPMessage) MarshalJSON() ([]byte, error) {
 			Header:        h.Request.Header,
 		}})
 	} else if h.Response != nil {
-		return json.Marshal(&HTTPResponseWrapper{Response: HTTPResponse{
+		return json.Marshal(&HTTPResponseWrapper{Response: &HTTPResponse{
 			Proto:         h.Response.Proto,
 			Status:        h.Response.Status,
 			ContentLength: int(h.Response.ContentLength),

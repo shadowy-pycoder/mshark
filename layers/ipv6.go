@@ -84,11 +84,20 @@ func (p *IPv6Packet) Parse(data []byte) error {
 	buf = append(buf, data...)
 	versionTrafficFlow := binary.BigEndian.Uint32(buf[0:4])
 	p.Version = uint8(versionTrafficFlow >> 28)
+	if p.Version != 6 {
+		return fmt.Errorf("unknown version")
+	}
 	p.TrafficClass = newTrafficiClass(uint8((versionTrafficFlow >> 20) & 0xFF))
+	if p.TrafficClass.DSCPDesc == "Unknown" {
+		return fmt.Errorf("unknown DSCP")
+	}
 	p.FlowLabel = versionTrafficFlow & (1<<20 - 1)
 	p.PayloadLength = binary.BigEndian.Uint16(buf[4:6])
 	p.NextHeader = buf[6]
 	p.NextHeaderDesc = p.nextHeader()
+	if p.NextHeaderDesc == "Unknown" {
+		return fmt.Errorf("unknown next header")
+	}
 	p.HopLimit = buf[7]
 	var ok bool
 	p.SrcIP, ok = netip.AddrFromSlice(buf[8:24])
@@ -161,7 +170,7 @@ func (p *IPv6Packet) nextHeader() string {
 	case 140:
 		header = "Shim6 Protocol"
 	default:
-		header = ""
+		header = "Unknown"
 	}
 	return header
 }

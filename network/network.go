@@ -3,6 +3,7 @@ package network
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"net"
 	"net/netip"
@@ -10,12 +11,68 @@ import (
 	"os/exec"
 	"strings"
 	"text/tabwriter"
+
+	"github.com/mdlayher/packet"
+	"github.com/packetcap/go-pcap/filter"
+	"golang.org/x/net/bpf"
 )
+
+const ETH_P_ALL int = 0x03
 
 var (
 	BroadcastMAC = net.HardwareAddr{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
 	LoopbackMAC  = net.HardwareAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 )
+
+type ListenConfig struct {
+	Device      *net.Interface // network interface which to bind to, if not specified default interface is used
+	Protocol    int            // network protocol, defaults to ETH_P_ALL
+	Promiscuous *bool          // enable or disable promiscuous mode
+	FilterExpr  string         // packet filter expression like in tcpdump
+}
+
+func ListenPacket(conf *ListenConfig) (*packet.Conn, error) {
+	packetcfg := packet.Config{}
+	// setting up filter
+	if conf.FilterExpr != "" {
+		e := filter.NewExpression(conf.FilterExpr)
+		f := e.Compile()
+		instructions, err := f.Compile()
+		if err != nil {
+			return nil, fmt.Errorf("failed to compile filter into instructions: %v", err)
+		}
+		raw, err := bpf.Assemble(instructions)
+		if err != nil {
+			return nil, fmt.Errorf("bpf assembly failed: %v", err)
+		}
+		packetcfg.Filter = raw
+	}
+	if conf.Device == nil {
+		var err error
+		conf.Device, err = GetDefaultInterface()
+		if err != nil {
+			return nil, err
+		}
+	}
+	if conf.Protocol == 0 {
+		conf.Protocol = ETH_P_ALL
+	}
+	// opening connection
+	c, err := packet.Listen(conf.Device, packet.Raw, conf.Protocol, &packetcfg)
+	if err != nil {
+		if errors.Is(err, os.ErrPermission) {
+			return nil, fmt.Errorf("permission denied (try setting CAP_NET_RAW capability): %v", err)
+		}
+		return nil, fmt.Errorf("failed to listen: %v", err)
+	}
+	// setting promisc mode
+	if conf.Promiscuous != nil {
+		if err := c.SetPromiscuous(*conf.Promiscuous); err != nil {
+			return nil, fmt.Errorf("unable to set promiscuous mode: %v", err)
+		}
+	}
+	return c, nil
+}
 
 // InterfaceByName returns the interface specified by name.
 func InterfaceByName(name string) (*net.Interface, error) {

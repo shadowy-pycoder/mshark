@@ -19,15 +19,8 @@ type UDPSegment struct {
 	Payload   []byte
 }
 
-func NewUDPSegment(srcPort, dstPort uint16, payload []byte, pseudo *[]byte) (*UDPSegment, error) {
+func NewUDPSegment(srcPort, dstPort uint16, payload []byte) (*UDPSegment, error) {
 	udp := &UDPSegment{SrcPort: srcPort, DstPort: dstPort, UDPLength: uint16(headerSizeUDP + len(payload)), Payload: payload}
-	if pseudo != nil {
-		var err error
-		udp.Checksum, err = CalculateUDPChecksum(append(*pseudo, udp.ToBytes()...))
-		if err != nil {
-			return nil, err
-		}
-	}
 	return udp, nil
 }
 
@@ -91,6 +84,15 @@ func (u *UDPSegment) NextLayer() Layer {
 }
 
 func (u *UDPSegment) Name() LayerName { return LayerUDP }
+
+func (u *UDPSegment) SetChecksum(pseudo []byte) error {
+	checksum, err := CalculateUDPChecksum(append(pseudo, u.ToBytes()...))
+	if err != nil {
+		return err
+	}
+	u.Checksum = checksum
+	return nil
+}
 
 func CalculateUDPChecksum(data []byte) (uint16, error) {
 	var sum uint16

@@ -83,7 +83,11 @@ func NewIPv4Packet(srcIP, dstIP netip.Addr, proto IPProto, payload []byte) (*IPv
 		DstIP:       dstIP,
 		Payload:     payload,
 	}
-	ipPacket.HeaderChecksum, _ = CalculateIPv4Checksum(ipPacket.ToBytes())
+	headerChecksum, err := CalculateIPv4Checksum(ipPacket.ToBytes())
+	if err != nil {
+		return nil, fmt.Errorf("failed calculating checksum")
+	}
+	ipPacket.HeaderChecksum = headerChecksum
 	return ipPacket, nil
 }
 
@@ -159,6 +163,9 @@ func (p *IPv4Packet) UnmarshalBinary(data []byte) error {
 	buf = append(buf, data...)
 	versionIHL := buf[0]
 	p.Version = versionIHL >> 4
+	if p.Version != 4 {
+		return fmt.Errorf("unknown version")
+	}
 	p.IHL = versionIHL & 15
 	dscpECN := buf[1]
 	p.DSCP = dscpECN >> 2
@@ -172,7 +179,11 @@ func (p *IPv4Packet) UnmarshalBinary(data []byte) error {
 	p.FragmentOffset = flagsOffset & (1<<13 - 1)
 	p.TTL = buf[8]
 	proto := IPProto(buf[9])
-	p.Protocol = &IPv4Proto{Val: proto, Desc: protodesc(proto)}
+	protodesc := protodesc(proto)
+	if protodesc == "Unknown" {
+		return fmt.Errorf("unknown protocol")
+	}
+	p.Protocol = &IPv4Proto{Val: proto, Desc: protodesc}
 	p.HeaderChecksum = binary.BigEndian.Uint16(buf[headerChecksumOffsetIPv4:12])
 	var ok bool
 	p.SrcIP, ok = netip.AddrFromSlice(buf[12:16])
@@ -277,6 +288,10 @@ func CalculateIPv4Checksum(data []byte) (uint16, error) {
 
 func (p *IPv4Packet) PseudoHeader() *IPv4PseudoHeader {
 	return &IPv4PseudoHeader{SrcIP: p.SrcIP, DstIP: p.DstIP, Protocol: p.Protocol, TotalLength: uint16(len(p.Payload))}
+}
+
+func (p *IPv4Packet) SetPayload(payload []byte) {
+	p.Payload = payload
 }
 
 type IPv4PseudoHeader struct {

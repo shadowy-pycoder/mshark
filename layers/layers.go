@@ -206,10 +206,7 @@ func ParseNextLayer(data []byte, src, dst *uint16) Layer {
 			return next
 		}
 	}
-	if next = parseNextLayerFromBytes(buf); next != nil {
-		return next
-	}
-	return parseNextLayerFallback(buf)
+	return parseNextLayerFromBytes(buf)
 }
 
 func GetLayer(layer LayerName) Layer {
