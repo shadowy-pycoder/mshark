@@ -53,7 +53,7 @@ type ARPSpoofConfig struct {
 
 // NewARPSpoofConfig creates ARPSpoofConfig from a list of options separated by semicolon and logger.
 //
-// Example: "targets 10.0.0.1,10.0.0.5-10,192.168.1.*,192.168.10.0/24;fullduplex false;debug true;interface eth0;gateway 192.168.1.1"`.
+// Example: "targets 10.0.0.1,10.0.0.5-10,192.168.1.*,192.168.10.0/24;fullduplex false;debug true;interface eth0;gateway 192.168.1.1".
 // All fields in configuration string are optional.
 func NewARPSpoofConfig(s string, logger *zerolog.Logger) (*ARPSpoofConfig, error) {
 	asc := &ARPSpoofConfig{Logger: logger}
@@ -171,6 +171,30 @@ type ARPSpoofer struct {
 	quit         chan bool
 	wg           sync.WaitGroup
 	p            *packet.Conn
+}
+
+func (ar *ARPSpoofer) Interface() *net.Interface {
+	return ar.iface
+}
+
+func (ar *ARPSpoofer) GatewayIP() netip.Addr {
+	return ar.gwIP
+}
+
+func (ar *ARPSpoofer) GatewayMAC() net.HardwareAddr {
+	return ar.gwMAC
+}
+
+func (ar *ARPSpoofer) HostIP() netip.Addr {
+	return ar.hostIP
+}
+
+func (ar *ARPSpoofer) HostMAC() net.HardwareAddr {
+	return ar.hostMAC
+}
+
+func (ar *ARPSpoofer) ARPTable() *ARPTable {
+	return ar.arpTable
 }
 
 func NewARPSpoofer(conf *ARPSpoofConfig) (*ARPSpoofer, error) {
