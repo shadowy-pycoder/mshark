@@ -15,7 +15,7 @@ type TrafficClass struct {
 	ECN      uint8
 }
 
-func newTrafficiClass(tc uint8) *TrafficClass {
+func newTrafficClass(tc uint8) *TrafficClass {
 	dscpbin := tc >> 2
 	return &TrafficClass{
 		Raw:      tc,
@@ -87,7 +87,7 @@ func (p *IPv6Packet) Parse(data []byte) error {
 	if p.Version != 6 {
 		return fmt.Errorf("unknown version")
 	}
-	p.TrafficClass = newTrafficiClass(uint8((versionTrafficFlow >> 20) & 0xFF))
+	p.TrafficClass = newTrafficClass(uint8((versionTrafficFlow >> 20) & 0xFF))
 	if p.TrafficClass.DSCPDesc == "Unknown" {
 		return fmt.Errorf("unknown DSCP")
 	}
@@ -109,6 +109,9 @@ func (p *IPv6Packet) Parse(data []byte) error {
 		return fmt.Errorf("malformed IPv6 address")
 	}
 	p.Payload = buf[headerSizeIPv6:]
+	if p.PayloadLength != 0 && int(p.PayloadLength) != len(p.Payload) {
+		return fmt.Errorf("payload length filed is not equal to actual payload size")
+	}
 	return nil
 }
 

@@ -26,20 +26,22 @@ func (f *FTPMessage) Parse(data []byte) error {
 	if !checkFTP(buf) {
 		return fmt.Errorf("malformed ftp message")
 	}
-	f.summary = nil
-	f.data = nil
 	sp := bytes.Split(buf, crlf)
 	lsp := len(sp)
 	switch {
 	case lsp > 2:
-		f.summary = bytes.Join(sp[:2], bspace)
+		f.summary = bytes.TrimSpace(bytes.Join(sp[:2], bspace))
 		sp[0] = joinBytes(dash, sp[0])
-		f.data = bytes.TrimSuffix(bytes.TrimSuffix(bytes.Join(sp, lfd), dash), lf)
+		f.data = bytes.TrimSpace(bytes.TrimSuffix(bytes.TrimSuffix(bytes.Join(sp, lfd), dash), lf))
 	case lsp > 1:
-		f.summary = sp[0]
+		f.summary = bytes.TrimSpace(sp[0])
 		sp[0] = joinBytes(dash, sp[0])
-		f.data = bytes.TrimSuffix(bytes.TrimSuffix(bytes.Join(sp, lfd), dash), lf)
+		f.data = bytes.TrimSpace(bytes.TrimSuffix(bytes.TrimSuffix(bytes.Join(sp, lfd), dash), lf))
 	default:
+		return fmt.Errorf("failed parsing FTP message")
+	}
+	if len(f.summary) == 0 || len(f.data) == 0 {
+		return fmt.Errorf("failed parsing FTP message")
 	}
 	return nil
 }

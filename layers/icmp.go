@@ -65,6 +65,9 @@ func (i *ICMPSegment) Parse(data []byte) error {
 		return fmt.Errorf("minimum payload length for ICMP with type %d is %d bytes", i.Type, pLen)
 	}
 	i.TypeDesc, i.CodeDesc = i.typecode()
+	if i.TypeDesc == "Unknown" || i.CodeDesc == "Unknown" {
+		return fmt.Errorf("failed determining type or code")
+	}
 	return nil
 }
 

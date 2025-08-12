@@ -170,8 +170,14 @@ func (p *IPv4Packet) UnmarshalBinary(data []byte) error {
 	dscpECN := buf[1]
 	p.DSCP = dscpECN >> 2
 	p.DSCPDesc = dscpdesc(p.DSCP)
+	if p.DSCPDesc == "Unknown" {
+		return fmt.Errorf("unknown DSCP")
+	}
 	p.ECN = dscpECN & 3
 	p.TotalLength = binary.BigEndian.Uint16(buf[2:4])
+	if int(p.TotalLength) != len(buf) {
+		return fmt.Errorf("total length is not equal to actual packet size")
+	}
 	p.Identification = binary.BigEndian.Uint16(buf[4:6])
 	flagsOffset := binary.BigEndian.Uint16(buf[6:8])
 	flags := uint8(flagsOffset >> 13)
