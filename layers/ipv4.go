@@ -73,15 +73,16 @@ func NewIPv4Packet(srcIP, dstIP netip.Addr, proto IPProto, payload []byte) (*IPv
 		return nil, fmt.Errorf("malformed IPv4 address")
 	}
 	ipPacket := &IPv4Packet{
-		Version:     4,
-		IHL:         5,
-		TotalLength: uint16(headerSizeIPv4 + len(payload)),
-		Flags:       NewIPv4Flags(0),
-		TTL:         64,
-		Protocol:    &IPv4Proto{Val: proto, Desc: protodesc(proto)},
-		SrcIP:       srcIP,
-		DstIP:       dstIP,
-		Payload:     payload,
+		Version:        4,
+		IHL:            5,
+		TotalLength:    uint16(headerSizeIPv4 + len(payload)),
+		Identification: MustGenerateRandomUint16NE(),
+		Flags:          NewIPv4Flags(2),
+		TTL:            128,
+		Protocol:       &IPv4Proto{Val: proto, Desc: protodesc(proto)},
+		SrcIP:          srcIP,
+		DstIP:          dstIP,
+		Payload:        payload,
 	}
 	headerChecksum, err := CalculateIPv4Checksum(ipPacket.ToBytes())
 	if err != nil {

@@ -3,9 +3,12 @@ package layers
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/binary"
 	"fmt"
 	"unsafe"
+
+	"github.com/shadowy-pycoder/mshark/native"
 )
 
 const maxLenSummary = 110
@@ -272,4 +275,46 @@ func isDigit(b byte) bool {
 
 func isUpper(b byte) bool {
 	return b >= 'A' && b <= 'Z'
+}
+
+func GenerateRandomBytes(n int) ([]byte, error) {
+	b := make([]byte, n)
+	_, err := rand.Read(b)
+	if err != nil {
+		return nil, err
+	}
+
+	return b, nil
+}
+
+func GenerateRandomUint16LE() (uint16, error) {
+	b, err := GenerateRandomBytes(2)
+	if err != nil {
+		return 0, err
+	}
+	return binary.LittleEndian.Uint16(b), nil
+}
+
+func GenerateRandomUint16BE() (uint16, error) {
+	b, err := GenerateRandomBytes(2)
+	if err != nil {
+		return 0, err
+	}
+	return binary.BigEndian.Uint16(b), nil
+}
+
+func GenerateRandomUint16NE() (uint16, error) {
+	b, err := GenerateRandomBytes(2)
+	if err != nil {
+		return 0, err
+	}
+	return native.Endian.Uint16(b), nil
+}
+
+func MustGenerateRandomUint16NE() uint16 {
+	rn, err := GenerateRandomUint16NE()
+	if err != nil {
+		panic(err)
+	}
+	return rn
 }
