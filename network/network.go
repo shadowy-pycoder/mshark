@@ -139,6 +139,21 @@ func GetDefaultInterface() (*net.Interface, error) {
 	return net.InterfaceByName(defaultInterface)
 }
 
+func GetDefaultInterfaceFromRoute() (*net.Interface, error) {
+	cmd := exec.Command("sh", "-c", `ip -4 route get 8.8.8.8 | tr -d '\n'`)
+	routeRaw, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	routeFields := strings.Fields(string(routeRaw))
+	for i, f := range routeFields {
+		if f == "dev" && i+1 < len(routeFields) && routeFields[i+1] != "tun" {
+			return net.InterfaceByName(routeFields[i+1])
+		}
+	}
+	return nil, fmt.Errorf("failed getting default interface from route")
+}
+
 func GetDefaultGatewayIPv4() (netip.Addr, error) {
 	cmd := exec.Command("sh", "-c", `ip -4 route show 0.0.0.0/0 | awk '{print $3 " " $5}'`)
 	ipdevRaw, err := cmd.Output()
@@ -165,6 +180,22 @@ func GetDefaultGatewayIPv4() (netip.Addr, error) {
 		return ip, nil
 	}
 	return netip.Addr{}, fmt.Errorf("gateway IPv4 not found ")
+}
+
+func GetDefaultGatewayIPv4FromRoute() (netip.Addr, error) {
+	cmd := exec.Command("sh", "-c", `ip -4 route get 8.8.8.8 | awk '{print $3}' | tr -d '\n'`)
+	ipstrRaw, err := cmd.Output()
+	if err != nil {
+		return netip.Addr{}, err
+	}
+	ip, err := netip.ParseAddr(string(ipstrRaw))
+	if err != nil {
+		return netip.Addr{}, err
+	}
+	if !ip.IsValid() || !ip.Is4() {
+		return netip.Addr{}, fmt.Errorf("failed getting default gateway from route")
+	}
+	return ip, nil
 }
 
 func GetGatewayIPv4FromInterface(iface string) (netip.Addr, error) {

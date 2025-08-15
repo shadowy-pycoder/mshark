@@ -200,9 +200,14 @@ func (ar *ARPSpoofer) ARPTable() *ARPTable {
 func NewARPSpoofer(conf *ARPSpoofConfig) (*ARPSpoofer, error) {
 	arpspoofer := &ARPSpoofer{}
 	// determining interface
-	iface, err := network.GetDefaultInterface()
+	var iface *net.Interface
+	var err error
+	iface, err = network.GetDefaultInterface()
 	if err != nil {
-		return nil, err
+		iface, err = network.GetDefaultInterfaceFromRoute()
+		if err != nil {
+			return nil, err
+		}
 	}
 	if conf.Interface != "" {
 		arpspoofer.iface, err = net.InterfaceByName(conf.Interface)
@@ -236,7 +241,10 @@ func NewARPSpoofer(conf *ARPSpoofConfig) (*ARPSpoofer, error) {
 		} else {
 			gwIP, err = network.GetDefaultGatewayIPv4()
 			if err != nil {
-				return nil, fmt.Errorf("failed fetching gateway ip: %w", err)
+				gwIP, err = network.GetDefaultGatewayIPv4FromRoute()
+				if err != nil {
+					return nil, fmt.Errorf("failed fetching gateway ip: %w", err)
+				}
 			}
 		}
 		arpspoofer.gwIP = gwIP
