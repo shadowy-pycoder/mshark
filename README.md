@@ -3,7 +3,7 @@
 # mShark - Mini [Wireshark](https://www.wireshark.org/) written in Go
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/shadowy-pycoder/mshark.svg)](https://pkg.go.dev/github.com/shadowy-pycoder/mshark)
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-yellow.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/shadowy-pycoder/mshark)
 [![Go Report Card](https://goreportcard.com/badge/github.com/shadowy-pycoder/mshark)](https://goreportcard.com/report/github.com/shadowy-pycoder/mshark)
 ![GitHub Release](https://img.shields.io/github/v/release/shadowy-pycoder/mshark)

@@ -117,6 +117,7 @@ func DisplayInterfaces(includeAny bool) error {
 }
 
 func GetDefaultInterface() (*net.Interface, error) {
+	// https://gist.github.com/player0k/038afe3031ee8d0176839a7542c086a5?permalink_comment_id=4679125#gistcomment-4679125
 	f, err := os.Open("/proc/net/route")
 	if err != nil {
 		return nil, err
