@@ -208,9 +208,9 @@ func (d *DNSMessage) String() string {
 
 func (d *DNSMessage) Summary() string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("DNS Message: %s (%s) %#04x ", d.Flags.OPCodeDesc, d.Flags.QRDesc, d.TransactionID))
+	fmt.Fprintf(&sb, "DNS Message: %s (%s) %#04x ", d.Flags.OPCodeDesc, d.Flags.QRDesc, d.TransactionID)
 	for _, rec := range d.Questions {
-		sb.WriteString(fmt.Sprintf("%s %s ", rec.Type.Name, rec.Name))
+		fmt.Fprintf(&sb, "%s %s ", rec.Type.Name, rec.Name)
 		if sb.Len() > maxLenSummary {
 			goto result
 		}
@@ -418,11 +418,15 @@ func (rt *ResourceRecord) String() string {
 	var record string
 	switch rt.Name {
 	case "Root":
+		name := rt.Name
+		if rt.Type.Val == 2 { // NS
+			name = rt.RData.(*RDataNS).NsdName
+		}
 		record = fmt.Sprintf(`  - %s:
     - Name: %s
     - Type: %s (%d)
     - %s
-`, rt.Name, rt.Name, rt.Type.Name, rt.Type.Val, rt.RData)
+`, name, rt.Name, rt.Type.Name, rt.Type.Val, rt.RData)
 	default:
 		record = fmt.Sprintf(`  - %s:
     - Name: %s
@@ -695,7 +699,7 @@ func (d *RDataUnknown) String() string {
 // The domain name is parsed according to RFC 1035 section 4.1.
 func extractDomain(payload, tail []byte) (string, []byte, error) {
 	// see https://brunoscheufler.com/blog/2024-05-12-building-a-dns-message-parser#domain-names
-	var domainName string
+	var domainName strings.Builder
 	for len(tail) > 0 {
 		blen := tail[0]
 		if blen>>6 == 0b11 {
@@ -711,7 +715,7 @@ func extractDomain(payload, tail []byte) (string, []byte, error) {
 			if err != nil {
 				return "", nil, err
 			}
-			domainName += part
+			domainName.WriteString(part)
 			tail = tail[2:]
 			break
 		}
@@ -722,12 +726,12 @@ func extractDomain(payload, tail []byte) (string, []byte, error) {
 		if int(blen) > len(tail) {
 			return "", nil, ErrSliceBounds
 		}
-		domainName += bytesToStr(tail[0:blen])
-		domainName += "."
+		domainName.WriteString(bytesToStr(tail[0:blen]))
+		domainName.WriteString(".")
 
 		tail = tail[blen:]
 	}
-	return strings.TrimRight(domainName, "."), tail, nil
+	return strings.TrimRight(domainName.String(), "."), tail, nil
 }
 
 func parseQuery(payload, tail []byte) (*QueryEntry, []byte, error) {
@@ -893,72 +897,55 @@ func parseRData(payload, tail []byte, typ uint16, rdl int) (fmt.Stringer, []byte
 	return rdata, tail[rdl:], nil
 }
 
-func parseRoot(payload, tail []byte) (*ResourceRecord, []byte, error) {
-	if len(tail) < 10 {
-		return nil, nil, ErrSliceBounds
-	}
-	typ := binary.BigEndian.Uint16(tail[0:2])
-	rdl := int(binary.BigEndian.Uint16(tail[8:10]))
-	var rdata fmt.Stringer
-	var err error
-	rdata, tail, err = parseRData(payload, tail[2:], typ, rdl)
-	if err != nil {
-		return nil, nil, err
-	}
-	return &ResourceRecord{
-		Name:  "Root",
-		Type:  newRecordType(typ),
-		Class: &RecordClass{},
-		RData: rdata,
-	}, tail, nil
-}
-
 func parseResourceRecord(payload, tail []byte) (*ResourceRecord, []byte, error) {
 	var domain string
 	var err error
+	recordClass := &RecordClass{}
+	var rdlLength uint16 = 0
+	offset := 10
 	domain, tail, err = extractDomain(payload, tail)
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(tail) < 10 {
+	if len(tail) < offset {
 		return nil, nil, ErrSliceBounds
 	}
 	typ := binary.BigEndian.Uint16(tail[0:2])
 	cls := binary.BigEndian.Uint16(tail[2:4])
 	ttl := binary.BigEndian.Uint32(tail[4:8])
-	rdl := binary.BigEndian.Uint16(tail[8:10])
+	rdl := binary.BigEndian.Uint16(tail[8:offset])
 	var rdata fmt.Stringer
-	rdata, tail, err = parseRData(payload, tail[10:], typ, int(rdl))
+	if domain == "" && typ == 41 { // NOTE: ugly
+		offset = 2
+	}
+	rdata, tail, err = parseRData(payload, tail[offset:], typ, int(rdl))
 	if err != nil {
 		return nil, nil, err
+	}
+	if domain == "" {
+		domain = "Root"
+		ttl = 0
+	} else {
+		recordClass = newRecordClass(cls)
+		rdlLength = rdl
 	}
 	return &ResourceRecord{
 		Name:     domain,
 		Type:     newRecordType(typ),
-		Class:    newRecordClass(cls),
+		Class:    recordClass,
 		TTL:      ttl,
-		RDLength: rdl,
+		RDLength: rdlLength,
 		RData:    rdata,
 	}, tail, nil
 }
 
 func parseResourceRecords(payload, tail []byte, numRecords uint16) ([]*ResourceRecord, []byte, error) {
-	if len(tail) < 1 {
-		return nil, nil, ErrSliceBounds
-	}
 	records := make([]*ResourceRecord, numRecords)
 	var err error
 	for i := range records {
-		if tail[0] != 0 {
-			records[i], tail, err = parseResourceRecord(payload, tail)
-			if err != nil {
-				return nil, nil, err
-			}
-		} else {
-			records[i], tail, err = parseRoot(payload, tail[1:])
-			if err != nil {
-				return nil, nil, err
-			}
+		records[i], tail, err = parseResourceRecord(payload, tail)
+		if err != nil {
+			return nil, nil, err
 		}
 	}
 	return records, tail, nil
