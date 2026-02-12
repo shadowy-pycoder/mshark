@@ -198,7 +198,6 @@ func (pw *Writer) writeIdbOptions(in *net.Interface, expr string) ([]byte, error
 		3 + // padding
 		2 + // if_filter code
 		2 + // if_filter length
-		1 + // BPF string
 		exprLen + // if_filter
 		exprPad + // padding
 		2 + // if_os code
@@ -246,7 +245,8 @@ func (pw *Writer) writeIdbOptions(in *net.Interface, expr string) ([]byte, error
 // https://www.ietf.org/archive/id/draft-tuexen-opsawg-pcapng-05.html#name-enhanced-packet-block
 func (pw *Writer) WritePacket(timestamp time.Time, data []byte) error {
 	packetLen := len(data)
-	blockLen := 4 + 4 + 4 + 4 + 4 + 4 + 4 + packetLen + 4
+	padLen := pad(packetLen)
+	blockLen := 4 + 4 + 4 + 4 + 4 + 4 + 4 + packetLen + padLen + 4
 	binary.Write(pw.w, nativeEndian, epbBlockType)
 	binary.Write(pw.w, nativeEndian, uint32(blockLen))
 	binary.Write(pw.w, nativeEndian, interfaceID)
@@ -258,7 +258,7 @@ func (pw *Writer) WritePacket(timestamp time.Time, data []byte) error {
 	if _, err := pw.w.Write(data); err != nil {
 		return err
 	}
-	pw.w.Write(bytes.Repeat(zero, pad(packetLen)))
+	pw.w.Write(bytes.Repeat(zero, padLen))
 	binary.Write(pw.w, nativeEndian, uint32(blockLen))
 	return nil
 }
