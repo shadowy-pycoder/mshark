@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 
@@ -183,6 +184,34 @@ func GetDefaultGatewayIPv4() (netip.Addr, error) {
 	return netip.Addr{}, fmt.Errorf("gateway IPv4 not found ")
 }
 
+func GetDefaultGatewayIPv6() (netip.Addr, error) {
+	cmd := exec.Command("sh", "-c", `ip -6 route show ::/0 | awk '{print $3 " " $5}'`)
+	ipdevRaw, err := cmd.Output()
+	if err != nil {
+		return netip.Addr{}, err
+	}
+	for line := range strings.SplitSeq(strings.TrimRight(string(ipdevRaw), "\n"), "\n") {
+		ipdev := strings.Fields(line)
+		if len(ipdev) < 2 {
+			continue
+		}
+		ipstr := ipdev[0]
+		dev := ipdev[1]
+		if strings.Contains(dev, "tun") {
+			continue
+		}
+		ip, err := netip.ParseAddr(ipstr)
+		if err != nil {
+			continue
+		}
+		if !ip.IsValid() || !ip.Is6() {
+			continue
+		}
+		return ip, nil
+	}
+	return netip.Addr{}, fmt.Errorf("gateway IPv6 not found ")
+}
+
 func GetDefaultGatewayIPv4FromRoute() (netip.Addr, error) {
 	cmd := exec.Command("sh", "-c", `ip -4 route get 8.8.8.8 | awk '{print $3}' | tr -d '\n'`)
 	ipstrRaw, err := cmd.Output()
@@ -194,6 +223,22 @@ func GetDefaultGatewayIPv4FromRoute() (netip.Addr, error) {
 		return netip.Addr{}, err
 	}
 	if !ip.IsValid() || !ip.Is4() {
+		return netip.Addr{}, fmt.Errorf("failed getting default gateway from route")
+	}
+	return ip, nil
+}
+
+func GetDefaultGatewayIPv6FromRoute() (netip.Addr, error) {
+	cmd := exec.Command("sh", "-c", `ip -6 route get 2001:4860:4860::8888 | awk '{print $5}' | tr -d '\n'`)
+	ipstrRaw, err := cmd.Output()
+	if err != nil {
+		return netip.Addr{}, err
+	}
+	ip, err := netip.ParseAddr(string(ipstrRaw))
+	if err != nil {
+		return netip.Addr{}, err
+	}
+	if !ip.IsValid() || !ip.Is6() {
 		return netip.Addr{}, fmt.Errorf("failed getting default gateway from route")
 	}
 	return ip, nil
@@ -221,6 +266,28 @@ func GetGatewayIPv4FromInterface(iface string) (netip.Addr, error) {
 	return netip.Addr{}, fmt.Errorf("gateway IPv4 not found for %s", iface)
 }
 
+func GetGatewayIPv6FromInterface(iface string) (netip.Addr, error) {
+	cmd := exec.Command("sh", "-c", fmt.Sprintf("ip -6 route show dev %s", iface))
+	routes, err := cmd.Output()
+	if err != nil {
+		return netip.Addr{}, err
+	}
+	for line := range strings.Lines(string(routes)) {
+		fields := strings.Fields(line)
+		if len(fields) > 2 && fields[1] == "via" {
+			ip, err := netip.ParseAddr(fields[2])
+			if err != nil {
+				continue
+			}
+			if !ip.Is6() {
+				continue
+			}
+			return ip, nil
+		}
+	}
+	return netip.Addr{}, fmt.Errorf("gateway IPv6 not found for %s", iface)
+}
+
 func GetIPv4PrefixFromInterface(iface *net.Interface) (netip.Prefix, error) {
 	addrs, err := iface.Addrs()
 	if err != nil {
@@ -236,6 +303,23 @@ func GetIPv4PrefixFromInterface(iface *net.Interface) (netip.Prefix, error) {
 		}
 	}
 	return netip.Prefix{}, fmt.Errorf("no IPv4 prefix found")
+}
+
+func GetIPv6PrefixFromInterface(iface *net.Interface) (netip.Prefix, error) {
+	addrs, err := iface.Addrs()
+	if err != nil {
+		return netip.Prefix{}, err
+	}
+	for _, a := range addrs {
+		ipPrefix, err := netip.ParsePrefix(a.String())
+		if err != nil {
+			return netip.Prefix{}, err
+		}
+		if ipPrefix.Addr().Is6() {
+			return ipPrefix, nil
+		}
+	}
+	return netip.Prefix{}, fmt.Errorf("no IPv6 prefix found")
 }
 
 func IsLocalAddress(addr string) bool {
@@ -281,4 +365,21 @@ func AddrEqual(a, b string) bool {
 		}
 	}
 	return addr1.Compare(addr2) == 0
+}
+
+// ParseAddrPort parses provided address value and tries to convert it to netip.AddrPort.
+//
+// If address contains no IP (e.g. "80" or ":443"), it uses defaultHost to form address.
+func ParseAddrPort(v, defaultHost string) (netip.AddrPort, error) {
+	if port, err := strconv.Atoi(strings.TrimPrefix(v, ":")); err == nil {
+		if port < 0 || port > 65535 {
+			return netip.AddrPort{}, fmt.Errorf("port is out of range")
+		}
+		defHost, err := netip.ParseAddr(defaultHost)
+		if err != nil {
+			return netip.AddrPort{}, err
+		}
+		return netip.AddrPortFrom(defHost, uint16(port)), nil
+	}
+	return netip.ParseAddrPort(v)
 }
