@@ -8,7 +8,7 @@ import (
 
 const headerSizeICMPv6 = 4
 
-// ICMPv6 is an integral part of IPv6 and performs error reporting and diagnostic functions.
+// ICMPv6Segment is an integral part of IPv6 and performs error reporting and diagnostic functions.
 type ICMPv6Segment struct {
 	Type     uint8
 	TypeDesc string
@@ -39,8 +39,21 @@ func (i *ICMPv6Segment) Summary() string {
 	return fmt.Sprintf("ICMPv6 Segment: %s (%s)", i.TypeDesc, i.CodeDesc)
 }
 
-// Parse parses the given byte data into an ICMPv6 segment struct.
-func (i *ICMPv6Segment) Parse(data []byte) error {
+func (i *ICMPv6Segment) MarshalBinary() ([]byte, error) {
+	b := make([]byte, 1+1+2+len(i.Data))
+	b[0] = i.Type
+	b[1] = i.Code
+	binary.BigEndian.PutUint16(b[2:4], i.Checksum)
+	copy(b[headerSizeICMPv6:], i.Data)
+	return b, nil
+}
+
+func (i *ICMPv6Segment) ToBytes() []byte {
+	b, _ := i.MarshalBinary()
+	return b
+}
+
+func (i *ICMPv6Segment) UnmarshalBinary(data []byte) error {
 	if len(data) < headerSizeICMPv6 {
 		return fmt.Errorf("minimum header size for ICMPv6 is %d bytes, got %d bytes", headerSizeICMPv6, len(data))
 	}
@@ -68,6 +81,11 @@ func (i *ICMPv6Segment) Parse(data []byte) error {
 	}
 	i.TypeDesc, i.CodeDesc = i.typecode()
 	return nil
+}
+
+// Parse parses the given byte data into an ICMPv6 segment struct.
+func (i *ICMPv6Segment) Parse(data []byte) error {
+	return i.UnmarshalBinary(data)
 }
 
 func (i *ICMPv6Segment) NextLayer() Layer { return nil }

@@ -34,7 +34,7 @@ type Config struct {
 	Device       *net.Interface // The name of the network interface ("any" means listen on all interfaces).
 	Snaplen      int            // The maximum length of each packet snapshot.
 	Promisc      bool           // Promiscuous mode. This setting is ignored for "any" interface.
-	Timeout      time.Duration  // The maximum duration of the packet capture process.
+	Timeout      time.Duration  // The maximum deadline for new packet to arrive
 	PacketCount  int            // The maximum number of packets to capture.
 	PacketBuffer int            // The maximum size for packet buffer (Default: 8192)
 	Expr         string         // BPF filter expression.
@@ -149,13 +149,6 @@ func OpenLive(conf *Config, pw ...PacketWriter) error {
 	if err != nil {
 		return err
 	}
-	// timeout
-	if conf.Timeout > 0 {
-		if err := c.SetDeadline(time.Now().Add(conf.Timeout)); err != nil {
-			return fmt.Errorf("unable to set timeout: %v", err)
-		}
-	}
-
 	done := make(chan bool)
 
 	defer func() {
@@ -183,6 +176,7 @@ func OpenLive(conf *Config, pw ...PacketWriter) error {
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, os.Interrupt)
 		<-quit
+		c.SetDeadline(time.Now().Add(5 * time.Second))
 		close(done)
 	}()
 
@@ -218,6 +212,11 @@ func OpenLive(conf *Config, pw ...PacketWriter) error {
 			close(packetQueue)
 			return nil
 		default:
+			if conf.Timeout > 0 {
+				if err := c.SetDeadline(time.Now().Add(conf.Timeout)); err != nil {
+					return fmt.Errorf("unable to set timeout: %v", err)
+				}
+			}
 			n, _, err := c.ReadFrom(b)
 			if err != nil {
 				if errors.Is(err, os.ErrDeadlineExceeded) {

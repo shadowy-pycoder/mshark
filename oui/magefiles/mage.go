@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/magefile/mage/mg"
+	"github.com/magefile/mage/sh"
 	"github.com/magefile/mage/target"
 )
 
@@ -33,15 +34,20 @@ func download() error {
 	}
 
 	log.Printf("downloading %q", ouiURL)
+	req, err := http.NewRequest(http.MethodGet, ouiURL, http.NoBody)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", "Mage-oui-parser")
 
-	resp, err := http.Get(ouiURL)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return fmt.Errorf("download failed: %w", err)
+		return fmt.Errorf("download failed: status code=%s", resp.Status)
 	}
 
 	fout, err := os.Create("oui.csv")
@@ -58,14 +64,11 @@ func download() error {
 	return nil
 }
 
-func data() error {
-	old, err := target.Path("data.go", "oui.csv")
-	if err != nil {
-		return err
-	}
-
-	if old {
-		return download()
+func Clean() error {
+	for _, file := range []string{ouiCSV} {
+		if err := sh.Rm(file); err != nil {
+			return err
+		}
 	}
 	return nil
 }

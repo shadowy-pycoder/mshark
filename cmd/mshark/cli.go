@@ -52,7 +52,7 @@ func (f *ExtFlag) MarshalText() ([]byte, error) {
 
 func (f *ExtFlag) UnmarshalText(b []byte) error {
 	exts := *f
-	for _, ext := range strings.Split(string(b), ",") {
+	for ext := range strings.SplitSeq(string(b), ",") {
 		if !slices.Contains(exts, ext) && slices.Contains(supportedFormats, ext) {
 			exts = append(exts, ext)
 		}
@@ -84,7 +84,7 @@ func root(args []string) error {
 			return nil
 		},
 	)
-	flags.DurationVar(&conf.Timeout, "t", 0, "The maximum duration of the packet capture process. Example: 5s")
+	flags.DurationVar(&conf.Timeout, "t", 0, "The maximum deadline for capture process. Example: 5s")
 	flags.IntVar(&conf.PacketCount, "c", 0, "The maximum number of packets to capture.")
 	packetBuffer := flags.Int("b", 8192, "The maximum size of packet queue.")
 	flags.StringVar(&conf.Expr, "e", "", `BPF filter expression. Example: "ip proto tcp".`)

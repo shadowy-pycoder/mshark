@@ -14,7 +14,7 @@ func BenchmarkParseIPv6(b *testing.B) {
 	defer close()
 	b.ResetTimer()
 	ip := &IPv6Packet{}
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = ip.Parse(packet)
 		fmt.Fprint(io.Discard, ip.String())
 	}
@@ -22,13 +22,12 @@ func BenchmarkParseIPv6(b *testing.B) {
 
 func TestParseIPv6(t *testing.T) {
 	expected := &IPv6Packet{
-		Version:        6,
-		TrafficClass:   &TrafficClass{Raw: 0, DSCP: 0, DSCPDesc: "Standard (DF)", ECN: 0},
-		FlowLabel:      455085,
-		PayloadLength:  40,
-		NextHeader:     6,
-		NextHeaderDesc: "TCP",
-		HopLimit:       64,
+		Version:       6,
+		TrafficClass:  &TrafficClass{Raw: 0, DSCP: 0, DSCPDesc: "Standard (DF)", ECN: 0},
+		FlowLabel:     455085,
+		PayloadLength: 40,
+		NextHeader:    NewIPv6Proto(ProtoTCP),
+		HopLimit:      64,
 		SrcIP: netip.AddrFrom16([16]byte{
 			0xFD, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 			0xF2, 0x3F, 0xD1, 0x59, 0x50, 0x48, 0x9C, 0x14,
