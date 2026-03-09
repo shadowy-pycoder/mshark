@@ -21,8 +21,9 @@ import (
 const ETH_P_ALL int = 0x03
 
 var (
-	BroadcastMAC = net.HardwareAddr{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
-	LoopbackMAC  = net.HardwareAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+	BroadcastMAC     = net.HardwareAddr{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
+	LoopbackMAC      = net.HardwareAddr{0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+	IPv6MulticastMAC = net.HardwareAddr{0x33, 0x33, 0x00, 0x00, 0x00, 0x01}
 )
 
 type ListenConfig struct {
@@ -156,6 +157,43 @@ func GetDefaultInterfaceFromRoute() (*net.Interface, error) {
 	return nil, fmt.Errorf("failed getting default interface from route")
 }
 
+func GetDefaultInterfaceFromRouteIPv6() (*net.Interface, error) {
+	cmd := exec.Command("sh", "-c", `ip -6 route get 2001:4860:4860::8888  | tr -d '\n'`)
+	routeRaw, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	routeFields := strings.Fields(string(routeRaw))
+	for i, f := range routeFields {
+		if f == "dev" && i+1 < len(routeFields) && routeFields[i+1] != "tun" {
+			return net.InterfaceByName(routeFields[i+1])
+		}
+	}
+	return nil, fmt.Errorf("failed getting default interface from route")
+}
+
+func GetHostIPv6GlobalUnicastFromRoute() (netip.Addr, error) {
+	cmd := exec.Command("sh", "-c", `ip -6 route get 2001:4860:4860::8888  | tr -d '\n'`)
+	routeRaw, err := cmd.Output()
+	if err != nil {
+		return netip.Addr{}, err
+	}
+	routeFields := strings.Fields(string(routeRaw))
+	for i, f := range routeFields {
+		if f == "src" && i+1 < len(routeFields) {
+			ip, err := netip.ParseAddr(string(routeFields[i+1]))
+			if err != nil {
+				return netip.Addr{}, err
+			}
+			if !ip.IsValid() || !Is6(ip) || !ip.IsGlobalUnicast() {
+				return netip.Addr{}, fmt.Errorf("failed getting host IPv6 global unicast address from route")
+			}
+			return ip, nil
+		}
+	}
+	return netip.Addr{}, fmt.Errorf("failed getting host IPv6 global unicast address from route")
+}
+
 func GetDefaultGatewayIPv4() (netip.Addr, error) {
 	cmd := exec.Command("sh", "-c", `ip -4 route show 0.0.0.0/0 | awk '{print $3 " " $5}'`)
 	ipdevRaw, err := cmd.Output()
@@ -204,7 +242,7 @@ func GetDefaultGatewayIPv6() (netip.Addr, error) {
 		if err != nil {
 			continue
 		}
-		if !ip.IsValid() || !ip.Is6() {
+		if !ip.IsValid() || !Is6(ip) {
 			continue
 		}
 		return ip, nil
@@ -234,12 +272,36 @@ func GetDefaultGatewayIPv6FromRoute() (netip.Addr, error) {
 	if err != nil {
 		return netip.Addr{}, err
 	}
-	ip, err := netip.ParseAddr(string(ipstrRaw))
+	ipstr := string(ipstrRaw)
+	if ipstr == "" {
+		return netip.Addr{}, fmt.Errorf("failed getting default gateway IPv6 from route")
+	}
+	ip, err := netip.ParseAddr(ipstr)
+	if err != nil {
+		return netip.Addr{}, fmt.Errorf("failed getting default gateway IPv6 from route: %v", err)
+	}
+	if !ip.IsValid() || !Is6(ip) {
+		return netip.Addr{}, fmt.Errorf("failed getting default gateway IPv6 from route")
+	}
+	return ip, nil
+}
+
+func GetDefaultGatewayIPv6GlobalUnicastFromRoute() (netip.Addr, error) {
+	cmd := exec.Command("sh", "-c", `ip -6 route get 2001:4860:4860::8888 | awk '{print $11}' | tr -d '\n'`)
+	ipstrRaw, err := cmd.Output()
 	if err != nil {
 		return netip.Addr{}, err
 	}
-	if !ip.IsValid() || !ip.Is6() {
-		return netip.Addr{}, fmt.Errorf("failed getting default gateway from route")
+	ipstr := string(ipstrRaw)
+	if ipstr == "" {
+		return netip.Addr{}, fmt.Errorf("failed getting default gateway IPv6 global unicast address from route")
+	}
+	ip, err := netip.ParseAddr(ipstr)
+	if err != nil {
+		return netip.Addr{}, fmt.Errorf("failed getting default gateway IPv6 global unicast address from route: %v", err)
+	}
+	if !ip.IsValid() || !Is6(ip) || !ip.IsGlobalUnicast() {
+		return netip.Addr{}, fmt.Errorf("failed getting default gateway IPv6 global unicast address from route")
 	}
 	return ip, nil
 }
@@ -279,7 +341,7 @@ func GetGatewayIPv6FromInterface(iface string) (netip.Addr, error) {
 			if err != nil {
 				continue
 			}
-			if !ip.Is6() {
+			if !Is6(ip) {
 				continue
 			}
 			return ip, nil
@@ -305,7 +367,7 @@ func GetIPv4PrefixFromInterface(iface *net.Interface) (netip.Prefix, error) {
 	return netip.Prefix{}, fmt.Errorf("no IPv4 prefix found")
 }
 
-func GetIPv6PrefixFromInterface(iface *net.Interface) (netip.Prefix, error) {
+func GetIPv6LinkLocalUnicastPrefixFromInterface(iface *net.Interface) (netip.Prefix, error) {
 	addrs, err := iface.Addrs()
 	if err != nil {
 		return netip.Prefix{}, err
@@ -315,11 +377,28 @@ func GetIPv6PrefixFromInterface(iface *net.Interface) (netip.Prefix, error) {
 		if err != nil {
 			return netip.Prefix{}, err
 		}
-		if ipPrefix.Addr().Is6() {
+		if Is6(ipPrefix.Addr()) && ipPrefix.Addr().IsLinkLocalUnicast() {
 			return ipPrefix, nil
 		}
 	}
-	return netip.Prefix{}, fmt.Errorf("no IPv6 prefix found")
+	return netip.Prefix{}, fmt.Errorf("no IPv6 link local unicast prefix found")
+}
+
+func GetIPv6GlobalUnicastPrefixFromInterface(iface *net.Interface) (netip.Prefix, error) {
+	addrs, err := iface.Addrs()
+	if err != nil {
+		return netip.Prefix{}, err
+	}
+	for _, a := range addrs {
+		ipPrefix, err := netip.ParsePrefix(a.String())
+		if err != nil {
+			return netip.Prefix{}, err
+		}
+		if Is6(ipPrefix.Addr()) && ipPrefix.Addr().IsGlobalUnicast() {
+			return ipPrefix, nil
+		}
+	}
+	return netip.Prefix{}, fmt.Errorf("no IPv6 global unicast prefix found")
 }
 
 func IsLocalAddress(addr string) bool {
@@ -382,4 +461,21 @@ func ParseAddrPort(v, defaultHost string) (netip.AddrPort, error) {
 		return netip.AddrPortFrom(defHost, uint16(port)), nil
 	}
 	return netip.ParseAddrPort(v)
+}
+
+// Is6 reports whether ip is an IPv6 address, excluding IPv4-mapped IPv6 addresses.
+func Is6(ip netip.Addr) bool {
+	if !ip.IsValid() || !ip.Is6() || ip.Is4In6() {
+		return false
+	}
+	return true
+}
+
+func PrefixIsValid(prefix netip.Addr, length int) bool {
+	// https://github.com/mdlayher/ndp/blob/6da62358a1b4654a411ae2eb4540936d9f361c1c/option.go#L184
+	p := netip.PrefixFrom(prefix, length)
+	if masked := p.Masked(); prefix != masked.Addr() {
+		return false
+	}
+	return true
 }

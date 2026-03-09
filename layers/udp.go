@@ -86,28 +86,11 @@ func (u *UDPSegment) NextLayer() Layer {
 func (u *UDPSegment) Name() LayerName { return LayerUDP }
 
 func (u *UDPSegment) SetChecksum(pseudo []byte) error {
-	checksum, err := CalculateUDPChecksum(append(pseudo, u.ToBytes()...))
+	// TODO: add support for IPv6, calculate offset
+	checksum, err := CalculateInternetChecksum(append(pseudo, u.ToBytes()...), headerChecksumOffsetUDP)
 	if err != nil {
 		return err
 	}
 	u.Checksum = checksum
 	return nil
-}
-
-func CalculateUDPChecksum(data []byte) (uint16, error) {
-	var sum uint16
-	udpLength := len(data)
-	for i := 0; i+1 < udpLength; i += 2 {
-		if i != headerChecksumOffsetUDP {
-			sum = add16WithCarryWrapAround(sum, binary.BigEndian.Uint16(data[i:i+2]))
-		}
-	}
-	if udpLength&1 == 1 {
-		sum = add16WithCarryWrapAround(sum, uint16(data[udpLength-1])<<8)
-	}
-	sum = ^sum
-	if sum == 0 {
-		sum = 0xFFFF
-	}
-	return sum, nil
 }

@@ -69,6 +69,7 @@ func NewIPv6Packet(srcIP, dstIP netip.Addr, proto IPProto, payload []byte) (*IPv
 	}
 	ipv6Packet := &IPv6Packet{
 		Version:       6,
+		TrafficClass:  NewTrafficClass(0),
 		PayloadLength: uint16(len(payload)),
 		NextHeader:    ipproto,
 		HopLimit:      255,

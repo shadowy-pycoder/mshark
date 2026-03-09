@@ -1,6 +1,6 @@
 module github.com/shadowy-pycoder/mshark
 
-go 1.26.0
+go 1.26.1
 
 require (
 	github.com/magefile/mage v1.15.0

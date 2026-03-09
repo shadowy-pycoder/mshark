@@ -269,6 +269,24 @@ func add16WithCarryWrapAround(x, y uint16) uint16 {
 	return uint16(sum32)
 }
 
+func CalculateInternetChecksum(data []byte, checksumOffset int) (uint16, error) {
+	var sum uint16
+	dataLength := len(data)
+	for i := 0; i+1 < dataLength; i += 2 {
+		if i != checksumOffset {
+			sum = add16WithCarryWrapAround(sum, binary.BigEndian.Uint16(data[i:i+2]))
+		}
+	}
+	if dataLength&1 == 1 {
+		sum = add16WithCarryWrapAround(sum, uint16(data[dataLength-1])<<8)
+	}
+	sum = ^sum
+	if sum == 0 {
+		sum = 0xFFFF
+	}
+	return sum, nil
+}
+
 func isDigit(b byte) bool {
 	return b >= '0' && b <= '9'
 }
