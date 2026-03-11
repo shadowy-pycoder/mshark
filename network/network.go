@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/netip"
 	"os"
@@ -286,26 +287,6 @@ func GetDefaultGatewayIPv6FromRoute() (netip.Addr, error) {
 	return ip, nil
 }
 
-func GetDefaultGatewayIPv6GlobalUnicastFromRoute() (netip.Addr, error) {
-	cmd := exec.Command("sh", "-c", `ip -6 route get 2001:4860:4860::8888 | awk '{print $11}' | tr -d '\n'`)
-	ipstrRaw, err := cmd.Output()
-	if err != nil {
-		return netip.Addr{}, err
-	}
-	ipstr := string(ipstrRaw)
-	if ipstr == "" {
-		return netip.Addr{}, fmt.Errorf("failed getting default gateway IPv6 global unicast address from route")
-	}
-	ip, err := netip.ParseAddr(ipstr)
-	if err != nil {
-		return netip.Addr{}, fmt.Errorf("failed getting default gateway IPv6 global unicast address from route: %v", err)
-	}
-	if !ip.IsValid() || !Is6(ip) || !ip.IsGlobalUnicast() {
-		return netip.Addr{}, fmt.Errorf("failed getting default gateway IPv6 global unicast address from route")
-	}
-	return ip, nil
-}
-
 func GetGatewayIPv4FromInterface(iface string) (netip.Addr, error) {
 	cmd := exec.Command("sh", "-c", fmt.Sprintf("ip -4 route show dev %s", iface))
 	routes, err := cmd.Output()
@@ -478,4 +459,43 @@ func PrefixIsValid(prefix netip.Addr, length int) bool {
 		return false
 	}
 	return true
+}
+
+func GetSystemNameservers() ([]netip.Addr, error) {
+	var f *os.File
+	var err error
+	f, err = os.Open("/run/systemd/resolve/resolv.conf")
+	if err != nil {
+		f, err = os.Open("/etc/resolv.conf")
+		if err != nil {
+			return nil, err
+		}
+	}
+	defer f.Close()
+	fBytes, err := io.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
+	ns := make([]netip.Addr, 0, 3)
+	for line := range strings.Lines(string(fBytes)) {
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 || fields[0] != "nameserver" {
+			continue
+		}
+		addr, err := netip.ParseAddr(fields[1])
+		if err != nil {
+			continue
+		}
+		if !addr.IsValid() || addr.IsLoopback() || addr.IsUnspecified() {
+			continue
+		}
+		ns = append(ns, addr)
+	}
+	if len(ns) == 0 {
+		return nil, fmt.Errorf("failed to find nameservers")
+	}
+	return ns, nil
 }
