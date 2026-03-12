@@ -5,7 +5,6 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/netip"
 	"os"
@@ -462,19 +461,14 @@ func PrefixIsValid(prefix netip.Addr, length int) bool {
 }
 
 func GetSystemNameservers() ([]netip.Addr, error) {
-	var f *os.File
+	var fBytes []byte
 	var err error
-	f, err = os.Open("/run/systemd/resolve/resolv.conf")
+	fBytes, err = os.ReadFile("/run/systemd/resolve/resolv.conf")
 	if err != nil {
-		f, err = os.Open("/etc/resolv.conf")
+		fBytes, err = os.ReadFile("/etc/resolv.conf")
 		if err != nil {
 			return nil, err
 		}
-	}
-	defer f.Close()
-	fBytes, err := io.ReadAll(f)
-	if err != nil {
-		return nil, err
 	}
 	ns := make([]netip.Addr, 0, 3)
 	for line := range strings.Lines(string(fBytes)) {
