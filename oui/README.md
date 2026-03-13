@@ -22,5 +22,5 @@ func main() {
 
 ```shell
 go install github.com/magefile/mage@latest
-mage build
+mage clean && mage build
 ```

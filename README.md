@@ -64,7 +64,7 @@ Options:
   -s int
     	The maximum length of each packet snapshot. Defaults to 65535.
   -t duration
-    	The maximum duration of the packet capture process. Example: 5s
+    	The maximum deadline for capture process. Example: 5s
   -v	Display full packet info when capturing to stdout or txt.
 ```
 
