@@ -493,3 +493,38 @@ func GetSystemNameservers() ([]netip.Addr, error) {
 	}
 	return ns, nil
 }
+
+// GetPromiscuous returns promiscuous mode bit value for given interface or -1 on error
+func GetPromiscuous(iface string) int {
+	flagsData, err := os.ReadFile(fmt.Sprintf("/sys/class/net/%s/flags", iface))
+	if err != nil {
+		return -1
+	}
+	flags, err := strconv.ParseInt(strings.TrimRight(string(flagsData), "\n"), 0, 64)
+	if err != nil {
+		return -1
+	}
+	return int(flags & 0x100)
+}
+
+// SetPromiscuous enables or disables promiscuous mode for given interface
+func SetPromiscuous(iface string, enable bool) error {
+	onoff := "off"
+	if enable {
+		onoff = "on"
+	}
+	cmd := exec.Command("sh", "-c", fmt.Sprintf("ip link set dev %s promisc %s", iface, onoff))
+	return cmd.Run()
+}
+
+func PrettifyBytes(b int64) string {
+	// https://stackoverflow.com/a/1094933/1333724
+	bf := float64(b)
+	for _, unit := range []string{"", "K", "M", "G", "T", "P", "E", "Z"} {
+		if bf < 1000.0 {
+			return fmt.Sprintf("%3.1f%sB", bf, unit)
+		}
+		bf /= 1000.0
+	}
+	return fmt.Sprintf("%.1fYB", bf)
+}
