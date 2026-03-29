@@ -336,3 +336,39 @@ func MustGenerateRandomUint16NE() uint16 {
 	}
 	return rn
 }
+
+func GenerateRandomUint32LE() (uint32, error) {
+	b, err := GenerateRandomBytes(4)
+	if err != nil {
+		return 0, err
+	}
+	return binary.LittleEndian.Uint32(b), nil
+}
+
+func MustGenerateRandomUint32LE() uint32 {
+	rn, err := GenerateRandomUint32LE()
+	if err != nil {
+		panic(err)
+	}
+	return rn
+}
+
+func GenerateRandomUint32BE() (uint32, error) {
+	b, err := GenerateRandomBytes(4)
+	if err != nil {
+		return 0, err
+	}
+	return binary.BigEndian.Uint32(b), nil
+}
+
+func MustGenerateRandomUint32BE() uint32 {
+	rn, err := GenerateRandomUint32BE()
+	if err != nil {
+		panic(err)
+	}
+	return rn
+}
+
+func pad8(size int) int {
+	return (8 - (size & 7)) & 7
+}

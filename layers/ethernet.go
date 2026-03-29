@@ -9,7 +9,7 @@ import (
 	"github.com/shadowy-pycoder/mshark/oui"
 )
 
-const headerSizeEthernet = 14
+const HeaderSizeEthernet = 14
 
 type EtherType uint16
 
@@ -89,7 +89,7 @@ func (ef *EthernetFrame) ToBytes() []byte {
 }
 
 func (ef *EthernetFrame) UnmarshalBinary(data []byte) error {
-	if len(data) < headerSizeEthernet {
+	if len(data) < HeaderSizeEthernet {
 		return fmt.Errorf("did not read a complete Ethernet frame, only %d bytes read", len(data))
 	}
 	buf := make([]byte, 0, len(data))
@@ -102,7 +102,7 @@ func (ef *EthernetFrame) UnmarshalBinary(data []byte) error {
 		return fmt.Errorf("failed determining Ethernet type")
 	}
 	ef.EtherType = &EthernetType{Val: et, Desc: etdesc}
-	ef.Payload = buf[headerSizeEthernet:]
+	ef.Payload = buf[HeaderSizeEthernet:]
 	ef.DstVendor = oui.VendorWithMAC(ef.DstMAC)
 	ef.SrcVendor = oui.VendorWithMAC(ef.SrcMAC)
 	return nil

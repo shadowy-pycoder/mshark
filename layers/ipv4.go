@@ -36,16 +36,29 @@ type IPProtocol struct {
 }
 
 func NewIPv4Proto(proto IPProto) *IPProtocol {
-	pdesc := protodesc(proto)
-	if pdesc == "Unknown" {
-		return nil
-	}
-	return &IPProtocol{Val: proto, Desc: pdesc}
+	return getprotoipv4(proto)
 }
 
 func (p *IPProtocol) String() string {
 	return fmt.Sprintf("%s (%d)", p.Desc, p.Val)
 }
+
+var (
+	IPProtocolHOPOPT     *IPProtocol = &IPProtocol{Val: ProtoHOPOPT, Desc: "HOPOPT"}
+	IPProtocolICMP       *IPProtocol = &IPProtocol{Val: ProtoICMP, Desc: "ICMP"}
+	IPProtocolTCP        *IPProtocol = &IPProtocol{Val: ProtoTCP, Desc: "TCP"}
+	IPProtocolUDP        *IPProtocol = &IPProtocol{Val: ProtoUDP, Desc: "UDP"}
+	IPProtocolRoute      *IPProtocol = &IPProtocol{Val: ProtoRoute, Desc: "Route"}
+	IPProtocolFragment   *IPProtocol = &IPProtocol{Val: ProtoFragment, Desc: "Fragment"}
+	IPProtocolESP        *IPProtocol = &IPProtocol{Val: ProtoESP, Desc: "Encapsulating Security payload"}
+	IPProtocolAuthHeader *IPProtocol = &IPProtocol{Val: ProtoAuthHeader, Desc: "Authentication Header"}
+	IPProtocolICMPv6     *IPProtocol = &IPProtocol{Val: ProtoICMPv6, Desc: "ICMPv6"}
+	IPProtocolNoNxt      *IPProtocol = &IPProtocol{Val: ProtoNoNxt, Desc: "NoNxt"}
+	IPProtocolOpts       *IPProtocol = &IPProtocol{Val: ProtoOpts, Desc: "Dst Opts"}
+	IPProtocolMobility   *IPProtocol = &IPProtocol{Val: ProtoMobility, Desc: "Mobility"}
+	IPProtocolHIP        *IPProtocol = &IPProtocol{Val: ProtoHIP, Desc: "Host Identity Protocol"}
+	IPProtocolShim6      *IPProtocol = &IPProtocol{Val: ProtoShim6, Desc: "Shim6 Protocol"}
+)
 
 type IPv4Flags struct {
 	Raw      uint8
@@ -241,18 +254,18 @@ func (p *IPv4Packet) Parse(data []byte) error {
 	return p.UnmarshalBinary(data)
 }
 
-func protodesc(proto IPProto) string {
+func getprotoipv4(proto IPProto) *IPProtocol {
 	// https://en.wikipedia.org/wiki/List_of_IP_protocol_numbers
-	var protodesc string
+	var protodesc *IPProtocol
 	switch proto {
 	case 1:
-		protodesc = "ICMP"
+		protodesc = IPProtocolICMP
 	case 6:
-		protodesc = "TCP"
+		protodesc = IPProtocolTCP
 	case 17:
-		protodesc = "UDP"
+		protodesc = IPProtocolUDP
 	default:
-		protodesc = "Unknown"
+		protodesc = nil
 	}
 	return protodesc
 }
