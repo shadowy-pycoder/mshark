@@ -660,7 +660,11 @@ func (rt *ResourceRecord) MarshalBinary() ([]byte, error) {
 	binary.Write(b, binary.BigEndian, rt.Class.Val)
 	binary.Write(b, binary.BigEndian, rt.TTL)
 	binary.Write(b, binary.BigEndian, rt.RDLength)
-	// TODO: add rdata
+	rdata, err := rt.RData.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+	b.Write(rdata)
 	return b.Bytes(), nil
 }
 
@@ -726,6 +730,15 @@ func (d *RDataA) String() string {
 	return fmt.Sprintf("Address: %s", d.Address)
 }
 
+func (d *RDataA) MarshalBinary() ([]byte, error) {
+	return d.Address.AsSlice(), nil
+}
+
+func (d *RDataA) ToBytes() []byte {
+	b, _ := d.MarshalBinary()
+	return b
+}
+
 type RDataNS struct {
 	NsdName string `json:"ns"`
 }
@@ -734,12 +747,30 @@ func (d *RDataNS) String() string {
 	return fmt.Sprintf("NS: %s", d.NsdName)
 }
 
+func (d *RDataNS) MarshalBinary() ([]byte, error) {
+	return encodeDomain(d.NsdName), nil
+}
+
+func (d *RDataNS) ToBytes() []byte {
+	b, _ := d.MarshalBinary()
+	return b
+}
+
 type RDataCNAME struct {
 	CName string `json:"cname"`
 }
 
 func (d *RDataCNAME) String() string {
 	return fmt.Sprintf("CNAME: %s", d.CName)
+}
+
+func (d *RDataCNAME) MarshalBinary() ([]byte, error) {
+	return encodeDomain(d.CName), nil
+}
+
+func (d *RDataCNAME) ToBytes() []byte {
+	b, _ := d.MarshalBinary()
+	return b
 }
 
 type RDataSOA struct {
@@ -769,6 +800,23 @@ func (d *RDataSOA) String() string {
 		d.MinimumTTL)
 }
 
+func (d *RDataSOA) MarshalBinary() ([]byte, error) {
+	b := new(bytes.Buffer)
+	b.Write(encodeDomain(d.PrimaryNS))
+	b.Write(encodeDomain(d.RespAuthorityMailbox))
+	binary.Write(b, binary.BigEndian, d.SerialNumber)
+	binary.Write(b, binary.BigEndian, d.RefreshInterval)
+	binary.Write(b, binary.BigEndian, d.RetryInterval)
+	binary.Write(b, binary.BigEndian, d.ExpireLimit)
+	binary.Write(b, binary.BigEndian, d.MinimumTTL)
+	return b.Bytes(), nil
+}
+
+func (d *RDataSOA) ToBytes() []byte {
+	b, _ := d.MarshalBinary()
+	return b
+}
+
 type RDataMX struct {
 	Preference uint16 `json:"preference"`
 	Exchange   string `json:"exchange"`
@@ -776,6 +824,18 @@ type RDataMX struct {
 
 func (d *RDataMX) String() string {
 	return fmt.Sprintf("MX: %d %s", d.Preference, d.Exchange)
+}
+
+func (d *RDataMX) MarshalBinary() ([]byte, error) {
+	b := new(bytes.Buffer)
+	binary.Write(b, binary.BigEndian, d.Preference)
+	b.Write(encodeDomain(d.Exchange))
+	return b.Bytes(), nil
+}
+
+func (d *RDataMX) ToBytes() []byte {
+	b, _ := d.MarshalBinary()
+	return b
 }
 
 type RDataTXT struct {
@@ -786,12 +846,30 @@ func (d *RDataTXT) String() string {
 	return fmt.Sprintf("TXT: %s", d.TxtData)
 }
 
+func (d *RDataTXT) MarshalBinary() ([]byte, error) {
+	return []byte(d.TxtData), nil
+}
+
+func (d *RDataTXT) ToBytes() []byte {
+	b, _ := d.MarshalBinary()
+	return b
+}
+
 type RDataAAAA struct {
 	Address netip.Addr `json:"address"`
 }
 
 func (d *RDataAAAA) String() string {
 	return fmt.Sprintf("Address: %s", d.Address)
+}
+
+func (d *RDataAAAA) MarshalBinary() ([]byte, error) {
+	return d.Address.AsSlice(), nil
+}
+
+func (d *RDataAAAA) ToBytes() []byte {
+	b, _ := d.MarshalBinary()
+	return b
 }
 
 type RDataOPT struct {
@@ -814,6 +892,21 @@ func (d *RDataOPT) String() string {
 		d.EDNSVer,
 		d.Z,
 		d.DataLen)
+}
+
+func (d *RDataOPT) MarshalBinary() ([]byte, error) {
+	b := make([]byte, 8)
+	binary.BigEndian.PutUint16(b[0:2], d.UDPPayloadSize)
+	b[2] = d.HigherBitsExtRCode
+	b[3] = d.EDNSVer
+	binary.BigEndian.PutUint16(b[4:6], d.Z)
+	binary.BigEndian.PutUint16(b[6:8], d.DataLen)
+	return b, nil
+}
+
+func (d *RDataOPT) ToBytes() []byte {
+	b, _ := d.MarshalBinary()
+	return b
 }
 
 type SvcParamKey struct {
@@ -890,6 +983,19 @@ func (sp *SvcParam) String() string {
 	)
 }
 
+func (sp *SvcParam) MarshalBinary() ([]byte, error) {
+	b := make([]byte, 4)
+	binary.BigEndian.PutUint16(b[0:2], sp.Key.Val)
+	binary.BigEndian.PutUint16(b[2:4], sp.Length)
+	b = append(b, sp.Value...)
+	return b, nil
+}
+
+func (sp *SvcParam) ToBytes() []byte {
+	b, _ := sp.MarshalBinary()
+	return b
+}
+
 type RDataHTTPS struct {
 	SvcPriority uint16      `json:"svc-priority"`
 	Length      int         `json:"length"`
@@ -919,12 +1025,43 @@ func (d *RDataHTTPS) String() string {
 	)
 }
 
+func (d *RDataHTTPS) MarshalBinary() ([]byte, error) {
+	b := new(bytes.Buffer)
+	binary.Write(b, binary.BigEndian, d.SvcPriority)
+	b.Write(encodeDomain(d.TargetName))
+	for _, p := range d.SvcParams {
+		if p == nil {
+			continue
+		}
+		pb, err := p.MarshalBinary()
+		if err != nil {
+			return nil, err
+		}
+		b.Write(pb)
+	}
+	return b.Bytes(), nil
+}
+
+func (d *RDataHTTPS) ToBytes() []byte {
+	b, _ := d.MarshalBinary()
+	return b
+}
+
 type RDataUnknown struct {
 	Data string `json:"data"`
 }
 
 func (d *RDataUnknown) String() string {
 	return d.Data
+}
+
+func (d *RDataUnknown) MarshalBinary() ([]byte, error) {
+	return []byte(d.Data), nil
+}
+
+func (d *RDataUnknown) ToBytes() []byte {
+	b, _ := d.MarshalBinary()
+	return b
 }
 
 // extractDomain extracts the DNS domain name from the given payload and tail.
@@ -1000,8 +1137,8 @@ func parseQueries(payload, tail []byte, numRecords uint16) ([]*QueryEntry, []byt
 }
 
 // https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-4
-func parseRData(payload, tail []byte, typ uint16, rdl int) (fmt.Stringer, []byte, error) {
-	var rdata fmt.Stringer
+func parseRData(payload, tail []byte, typ uint16, rdl int) (RData, []byte, error) {
+	var rdata RData
 	if rdl > len(tail) {
 		return nil, nil, ErrSliceBounds
 	}
@@ -1147,7 +1284,7 @@ func parseResourceRecord(payload, tail []byte) (*ResourceRecord, []byte, error) 
 	cls := binary.BigEndian.Uint16(tail[2:4])
 	ttl := binary.BigEndian.Uint32(tail[4:8])
 	rdl := binary.BigEndian.Uint16(tail[8:offset])
-	var rdata fmt.Stringer
+	var rdata RData
 	if domain == "" && typ == 41 { // NOTE: ugly
 		offset = 2
 	}
@@ -1185,9 +1322,11 @@ func parseResourceRecords(payload, tail []byte, numRecords uint16) ([]*ResourceR
 }
 
 func encodeDomain(name string) []byte {
+	if name == "Root" {
+		return []byte{0}
+	}
 	var out []byte
-	labels := strings.Split(name, ".")
-	for _, l := range labels {
+	for l := range strings.SplitSeq(name, ".") {
 		out = append(out, byte(len(l)))
 		out = append(out, []byte(l)...)
 	}
