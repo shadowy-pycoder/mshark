@@ -1,6 +1,8 @@
 package layers
 
 import (
+	"bytes"
+	"encoding"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -146,15 +148,15 @@ type DNSFlags struct {
 
 func (df *DNSFlags) String() string {
 	var flags string
-	switch df.QR.Val {
-	case 0:
+	switch df.QR {
+	case DNSQuery:
 		flags = fmt.Sprintf(`  - Response: Message is a %s
   - Opcode: %s
   - Truncated: %d
   - Recursion desired: %d
   - Reserved: %d
   - Non-authenticated data: %d`, df.QR, df.OPCode, df.TC, df.RD, df.Z, df.NA)
-	case 1:
+	case DNSReply:
 		flags = fmt.Sprintf(`  - Response: Message is a %s
   - Opcode: %s
   - Authoritative: %d
@@ -193,16 +195,16 @@ func NewDNSFlags(qr QRFlag, op OpCode, aa, tc, rd, ra, z, au, na bool, rc RCode)
 		RCode:  NewDNSRCode(rc),
 	}
 	var flags uint16
-	flags = flags | uint16(df.QR.Val)<<15
-	flags = flags | uint16(df.OPCode.Val)<<11
-	flags = flags | uint16(df.AA)<<10
-	flags = flags | uint16(df.TC)<<9
-	flags = flags | uint16(df.RD)<<8
-	flags = flags | uint16(df.RA)<<7
-	flags = flags | uint16(df.Z)<<6
-	flags = flags | uint16(df.AU)<<5
-	flags = flags | uint16(df.NA)<<4
-	flags = flags | uint16(df.RCode.Val)
+	flags |= uint16(df.QR.Val) << 15
+	flags |= uint16(df.OPCode.Val) << 11
+	flags |= uint16(df.AA) << 10
+	flags |= uint16(df.TC) << 9
+	flags |= uint16(df.RD) << 8
+	flags |= uint16(df.RA) << 7
+	flags |= uint16(df.Z) << 6
+	flags |= uint16(df.AU) << 5
+	flags |= uint16(df.NA) << 4
+	flags |= uint16(df.RCode.Val)
 	df.Raw = flags
 	return df
 }
@@ -308,6 +310,21 @@ func rcdesc(rcode RCode) *DNSRCode {
 	return rcdesc
 }
 
+func NewDNSMessage(tid uint16, flags *DNSFlags, qd []*QueryEntry, an, ns, ar []*ResourceRecord) (*DNSMessage, error) {
+	return &DNSMessage{
+		TransactionID: tid,
+		Flags:         flags,
+		QDCount:       uint16(len(qd)),
+		ANCount:       uint16(len(an)),
+		NSCount:       uint16(len(ns)),
+		ARCount:       uint16(len(ar)),
+		Questions:     qd,
+		AnswerRRs:     an,
+		AuthorityRRs:  ns,
+		AdditionalRRs: ar,
+	}, nil
+}
+
 type DNSMessage struct {
 	TransactionID uint16            `json:"transaction-id"`       // Used for matching response to queries.
 	Flags         *DNSFlags         `json:"flags,omitempty"`      // Flags specify the requested operation and a response code.
@@ -375,7 +392,49 @@ result:
 	return sb.String()[:maxLenSummary] + string(ellipsis)
 }
 
-// TODO: add MarshalBinary
+func (d *DNSMessage) MarshalBinary() ([]byte, error) {
+	b := make([]byte, headerSizeDNS)
+	binary.BigEndian.PutUint16(b[0:2], d.TransactionID)
+	binary.BigEndian.PutUint16(b[2:4], d.Flags.Raw)
+	binary.BigEndian.PutUint16(b[4:6], d.QDCount)
+	binary.BigEndian.PutUint16(b[6:8], d.ANCount)
+	binary.BigEndian.PutUint16(b[8:10], d.NSCount)
+	binary.BigEndian.PutUint16(b[10:headerSizeDNS], d.ARCount)
+	for _, r := range d.Questions {
+		rb, err := r.MarshalBinary()
+		if err != nil {
+			return nil, err
+		}
+		b = append(b, rb...)
+	}
+	for _, r := range d.AnswerRRs {
+		rb, err := r.MarshalBinary()
+		if err != nil {
+			return nil, err
+		}
+		b = append(b, rb...)
+	}
+	for _, r := range d.AuthorityRRs {
+		rb, err := r.MarshalBinary()
+		if err != nil {
+			return nil, err
+		}
+		b = append(b, rb...)
+	}
+	for _, r := range d.AdditionalRRs {
+		rb, err := r.MarshalBinary()
+		if err != nil {
+			return nil, err
+		}
+		b = append(b, rb...)
+	}
+	return b, nil
+}
+
+func (d *DNSMessage) ToBytes() []byte {
+	b, _ := d.MarshalBinary()
+	return b
+}
 
 func (d *DNSMessage) UnmarshalBinary(data []byte) error {
 	if len(data) < headerSizeDNS {
@@ -544,13 +603,19 @@ func typeName(typ uint16) string {
 	return typedesc
 }
 
+type RData interface {
+	fmt.Stringer
+	encoding.BinaryMarshaler
+	ToBytes() []byte
+}
+
 type ResourceRecord struct {
 	Name     string       `json:"name"`         // Name of the node to which this record pertains.
 	Type     *RecordType  `json:"record-type"`  // Type of RR in numeric form.
 	Class    *RecordClass `json:"record-class"` // Class code.
 	TTL      uint32       `json:"ttl"`          // Count of seconds that the RR stays valid.
 	RDLength uint16       `json:"rdata-length"` // Length of RData field (specified in octets).
-	RData    fmt.Stringer `json:"rdata"`        // Additional RR-specific data.
+	RData    RData        `json:"rdata"`        // Additional RR-specific data.
 }
 
 func (rt *ResourceRecord) String() string {
@@ -588,6 +653,22 @@ func (rt *ResourceRecord) String() string {
 	return record
 }
 
+func (rt *ResourceRecord) MarshalBinary() ([]byte, error) {
+	b := new(bytes.Buffer)
+	b.Write(encodeDomain(rt.Name))
+	binary.Write(b, binary.BigEndian, rt.Type.Val)
+	binary.Write(b, binary.BigEndian, rt.Class.Val)
+	binary.Write(b, binary.BigEndian, rt.TTL)
+	binary.Write(b, binary.BigEndian, rt.RDLength)
+	// TODO: add rdata
+	return b.Bytes(), nil
+}
+
+func (rt *ResourceRecord) ToBytes() []byte {
+	b, _ := rt.MarshalBinary()
+	return b
+}
+
 func (rt *ResourceRecord) Summary() string {
 	var summary string
 	switch rd := rt.RData.(type) {
@@ -622,6 +703,19 @@ func (qe *QueryEntry) String() string {
     - Type: %s (%d)
     - Class: %s (%d)
 `, qe.Name, qe.Name, qe.Type.Name, qe.Type.Val, qe.Class.Name, qe.Class.Val)
+}
+
+func (qe *QueryEntry) MarshalBinary() ([]byte, error) {
+	b := new(bytes.Buffer)
+	b.Write(encodeDomain(qe.Name))
+	binary.Write(b, binary.BigEndian, qe.Type.Val)
+	binary.Write(b, binary.BigEndian, qe.Class.Val)
+	return b.Bytes(), nil
+}
+
+func (qe *QueryEntry) ToBytes() []byte {
+	b, _ := qe.MarshalBinary()
+	return b
 }
 
 type RDataA struct {
@@ -1088,4 +1182,15 @@ func parseResourceRecords(payload, tail []byte, numRecords uint16) ([]*ResourceR
 		}
 	}
 	return records, tail, nil
+}
+
+func encodeDomain(name string) []byte {
+	var out []byte
+	labels := strings.Split(name, ".")
+	for _, l := range labels {
+		out = append(out, byte(len(l)))
+		out = append(out, []byte(l)...)
+	}
+	out = append(out, 0)
+	return out
 }
