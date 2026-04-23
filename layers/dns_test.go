@@ -14,7 +14,7 @@ func BenchmarkParseDNS(b *testing.B) {
 	defer close()
 	b.ResetTimer()
 	dns := &DNSMessage{}
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = dns.Parse(packet)
 		fmt.Fprint(io.Discard, dns.String())
 	}
@@ -24,20 +24,17 @@ func TestParseDNS(t *testing.T) {
 	expected := &DNSMessage{
 		TransactionID: 63448,
 		Flags: &DNSFlags{
-			Raw:        33152,
-			QR:         1,
-			QRDesc:     "reply",
-			OPCode:     0,
-			OPCodeDesc: "Standard query",
-			AA:         0,
-			TC:         0,
-			RD:         1,
-			RA:         1,
-			Z:          0,
-			AU:         0,
-			NA:         0,
-			RCode:      0,
-			RCodeDesc:  "No error",
+			Raw:    33152,
+			QR:     DNSReply,
+			OPCode: DNSOpCodeQuery,
+			AA:     0,
+			TC:     0,
+			RD:     1,
+			RA:     1,
+			Z:      0,
+			AU:     0,
+			NA:     0,
+			RCode:  DNSRCodeNoError,
 		},
 		QDCount: 1,
 		ANCount: 7,
@@ -316,7 +313,8 @@ func TestParseDNS(t *testing.T) {
 				RData: &RDataAAAA{
 					Address: netip.AddrFrom16([16]byte{
 						0x20, 0x01, 0x48, 0x60, 0x48, 0x02, 0x00, 0x34,
-						0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a}),
+						0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a,
+					}),
 				},
 			},
 			{
@@ -334,7 +332,8 @@ func TestParseDNS(t *testing.T) {
 				RData: &RDataAAAA{
 					Address: netip.AddrFrom16([16]byte{
 						0x20, 0x01, 0x48, 0x60, 0x48, 0x02, 0x00, 0x32,
-						0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a}),
+						0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a,
+					}),
 				},
 			},
 			{
@@ -352,7 +351,8 @@ func TestParseDNS(t *testing.T) {
 				RData: &RDataAAAA{
 					Address: netip.AddrFrom16([16]byte{
 						0x20, 0x01, 0x48, 0x60, 0x48, 0x02, 0x00, 0x36,
-						0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a}),
+						0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a,
+					}),
 				},
 			},
 			{
@@ -370,7 +370,8 @@ func TestParseDNS(t *testing.T) {
 				RData: &RDataAAAA{
 					Address: netip.AddrFrom16([16]byte{
 						0x20, 0x01, 0x48, 0x60, 0x48, 0x02, 0x00, 0x38,
-						0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a}),
+						0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a,
+					}),
 				},
 			},
 			{

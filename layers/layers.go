@@ -372,3 +372,10 @@ func MustGenerateRandomUint32BE() uint32 {
 func pad8(size int) int {
 	return (8 - (size & 7)) & 7
 }
+
+func bTou8(b bool) uint8 {
+	if b {
+		return 1
+	}
+	return 0
+}

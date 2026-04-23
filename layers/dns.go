@@ -11,36 +11,152 @@ import (
 
 const headerSizeDNS = 12
 
+type OpCode uint8
+
+const (
+	OpCodeQuery    OpCode = 0
+	OpCodeInvQuery OpCode = 1
+	OpCodeStatus   OpCode = 2
+	OpCodeNotify   OpCode = 4
+	OpCodeUpdate   OpCode = 5
+	OpCodeDSO      OpCode = 6
+)
+
+type DNSOpCode struct {
+	Val  OpCode `json:"val"`
+	Desc string `json:"desc"`
+}
+
+func (do *DNSOpCode) String() string {
+	return fmt.Sprintf("%s (%d)", do.Desc, do.Val)
+}
+
+func NewDNSOpCode(opcode OpCode) *DNSOpCode {
+	return getopcode(opcode)
+}
+
+var (
+	DNSOpCodeQuery    *DNSOpCode = &DNSOpCode{Val: OpCodeQuery, Desc: "Standard query"}
+	DNSOpCodeInvQuery *DNSOpCode = &DNSOpCode{Val: OpCodeInvQuery, Desc: "Inverse query"}
+	DNSOpCodeStatus   *DNSOpCode = &DNSOpCode{Val: OpCodeStatus, Desc: "Server status request"}
+	DNSOpCodeNotify   *DNSOpCode = &DNSOpCode{Val: OpCodeNotify, Desc: "Notify"}
+	DNSOpCodeUpdate   *DNSOpCode = &DNSOpCode{Val: OpCodeUpdate, Desc: "Update"}
+	DNSOpCodeDSO      *DNSOpCode = &DNSOpCode{Val: OpCodeDSO, Desc: "Stateful operation"}
+)
+
+type QRFlag uint8
+
+const (
+	QRFlagQuery QRFlag = 0
+	QRFlagReply QRFlag = 1
+)
+
+type DNSQRFlag struct {
+	Val  QRFlag `json:"val"`
+	Desc string `json:"desc"`
+}
+
+var (
+	DNSQuery *DNSQRFlag = &DNSQRFlag{Val: QRFlagQuery, Desc: "query"}
+	DNSReply *DNSQRFlag = &DNSQRFlag{Val: QRFlagReply, Desc: "reply"}
+)
+
+func (qr *DNSQRFlag) String() string {
+	return fmt.Sprintf("%s (%d)", qr.Desc, qr.Val)
+}
+
+func NewDNSQRFlag(qr QRFlag) *DNSQRFlag {
+	return qrdesc(qr)
+}
+
+type RCode uint8
+
+const (
+	RCodeNoError     RCode = 0
+	RCodeFormatError RCode = 1
+	RCodeServerFail  RCode = 2
+	RCodeNameError   RCode = 3
+	RCodeNotImpl     RCode = 4
+	RCodeRefused     RCode = 5
+	RCodeYXDomain    RCode = 6
+	RCodeYXRRSet     RCode = 7
+	RCodeNXRRSet     RCode = 8
+	RCodeNotAuth     RCode = 9
+	RCodeNotZone     RCode = 10
+	RCodeDSOTypeNI   RCode = 11
+	RCodeBadVers     RCode = 16
+	RCodeBadKey      RCode = 17
+	RCodeBadTime     RCode = 18
+	RCodeBadMode     RCode = 19
+	RCodeBadName     RCode = 20
+	RCodeBadAlg      RCode = 21
+	RCodeBadTrunc    RCode = 22
+	RCodeBadCookie   RCode = 23
+)
+
+type DNSRCode struct {
+	Val  RCode  `json:"val"`
+	Desc string `json:"desc"`
+}
+
+var (
+	DNSRCodeNoError   = &DNSRCode{Val: RCodeNoError, Desc: "No error"}
+	DNSRCodeFormatErr = &DNSRCode{Val: RCodeFormatError, Desc: "Format error"}
+	DNSRCodeServFail  = &DNSRCode{Val: RCodeServerFail, Desc: "Server failed to complete the DNS request"}
+	DNSRCodeNXDomain  = &DNSRCode{Val: RCodeNameError, Desc: "Domain name does not exist"}
+	DNSRCodeNotImpl   = &DNSRCode{Val: RCodeNotImpl, Desc: "Function not implemented"}
+	DNSRCodeRefused   = &DNSRCode{Val: RCodeRefused, Desc: "The server refused to answer for the query"}
+	DNSRCodeYXDomain  = &DNSRCode{Val: RCodeYXDomain, Desc: "Name that should not exist, does exist"}
+	DNSRCodeYXRRSet   = &DNSRCode{Val: RCodeYXRRSet, Desc: "RRset that should not exist, does exist"}
+	DNSRCodeNXRRSet   = &DNSRCode{Val: RCodeNXRRSet, Desc: "Server not authoritative for the zone"}
+	DNSRCodeNotAuth   = &DNSRCode{Val: RCodeNotAuth, Desc: "Server Not Authoritative for zone"}
+	DNSRCodeNotZone   = &DNSRCode{Val: RCodeNotZone, Desc: "Name not contained in zone"}
+	DNSRCodeDSOTypeNI = &DNSRCode{Val: RCodeDSOTypeNI, Desc: "DSO-TYPE Not Implemented"}
+	DNSRCodeBadVers   = &DNSRCode{Val: RCodeBadVers, Desc: "Bad OPT Version/TSIG Signature Failure"}
+	DNSRCodeBadKey    = &DNSRCode{Val: RCodeBadKey, Desc: "Key not recognized"}
+	DNSRCodeBadTime   = &DNSRCode{Val: RCodeBadTime, Desc: "Signature out of time window"}
+	DNSRCodeBadMode   = &DNSRCode{Val: RCodeBadMode, Desc: "Bad TKEY Mode"}
+	DNSRCodeBadName   = &DNSRCode{Val: RCodeBadName, Desc: "Duplicate key name"}
+	DNSRCodeBadAlg    = &DNSRCode{Val: RCodeBadAlg, Desc: "Algorithm not supported"}
+	DNSRCodeBadTrunc  = &DNSRCode{Val: RCodeBadTrunc, Desc: "Bad Truncation"}
+	DNSRCodeBadCookie = &DNSRCode{Val: RCodeBadCookie, Desc: "Bad/missing Server Cookie"}
+)
+
+func (rc *DNSRCode) String() string {
+	return fmt.Sprintf("%s (%d)", rc.Desc, rc.Val)
+}
+
+func NewDNSRCode(rc RCode) *DNSRCode {
+	return rcdesc(rc)
+}
+
 type DNSFlags struct {
-	Raw        uint16 `json:"raw"`
-	QR         uint8  `json:"qr"`     // Indicates if the message is a query (0) or a reply (1).
-	QRDesc     string `json:"qrdesc"` // Query (0) or Reply (1)
-	OPCode     uint8  `json:"opcode"` // https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-5
-	OPCodeDesc string `json:"opcodedesc"`
-	AA         uint8  `json:"aa"`    // Authoritative Answer, in a response, indicates if the DNS server is authoritative for the queried hostname.
-	TC         uint8  `json:"tc"`    // TrunCation, indicates that this message was truncated due to excessive length.
-	RD         uint8  `json:"rd"`    // Recursion Desired, indicates if the client means a recursive query.
-	RA         uint8  `json:"ra"`    // Recursion Available, in a response, indicates if the replying DNS server supports recursion.
-	Z          uint8  `json:"z"`     // Zero, reserved for future use.
-	AU         uint8  `json:"au"`    // Indicates if answer/authority portion was authenticated by the server.
-	NA         uint8  `json:"na"`    // Indicates if non-authenticated data is accepatable.
-	RCode      uint8  `json:"rcode"` // https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-6
-	RCodeDesc  string `json:"rcodedesc"`
+	Raw    uint16     `json:"raw"`
+	QR     *DNSQRFlag `json:"qr"`     // Indicates if the message is a query (0) or a reply (1).
+	OPCode *DNSOpCode `json:"opcode"` // https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-5
+	AA     uint8      `json:"aa"`     // Authoritative Answer, in a response, indicates if the DNS server is authoritative for the queried hostname.
+	TC     uint8      `json:"tc"`     // TrunCation, indicates that this message was truncated due to excessive length.
+	RD     uint8      `json:"rd"`     // Recursion Desired, indicates if the client means a recursive query.
+	RA     uint8      `json:"ra"`     // Recursion Available, in a response, indicates if the replying DNS server supports recursion.
+	Z      uint8      `json:"z"`      // Zero, reserved for future use.
+	AU     uint8      `json:"au"`     // Indicates if answer/authority portion was authenticated by the server.
+	NA     uint8      `json:"na"`     // Indicates if non-authenticated data is accepatable.
+	RCode  *DNSRCode  `json:"rcode"`  // https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-6
 }
 
 func (df *DNSFlags) String() string {
 	var flags string
-	switch df.QR {
+	switch df.QR.Val {
 	case 0:
-		flags = fmt.Sprintf(`  - Response: Message is a %s (%d)
-  - Opcode: %s (%d)
+		flags = fmt.Sprintf(`  - Response: Message is a %s
+  - Opcode: %s
   - Truncated: %d
   - Recursion desired: %d
   - Reserved: %d
-  - Non-authenticated data: %d`, df.QRDesc, df.QR, df.OPCodeDesc, df.OPCode, df.TC, df.RD, df.Z, df.NA)
+  - Non-authenticated data: %d`, df.QR, df.OPCode, df.TC, df.RD, df.Z, df.NA)
 	case 1:
-		flags = fmt.Sprintf(`  - Response: Message is a %s (%d)
-  - Opcode: %s (%d)
+		flags = fmt.Sprintf(`  - Response: Message is a %s
+  - Opcode: %s
   - Authoritative: %d
   - Truncated: %d
   - Recursion desired: %d
@@ -48,10 +164,8 @@ func (df *DNSFlags) String() string {
   - Reserved: %d
   - Answer authenticated: %d
   - Non-authenticated data: %d
-  - Reply code: %s (%d)`,
-			df.QRDesc,
+  - Reply code: %s`,
 			df.QR,
-			df.OPCodeDesc,
 			df.OPCode,
 			df.AA,
 			df.TC,
@@ -60,113 +174,136 @@ func (df *DNSFlags) String() string {
 			df.Z,
 			df.AU,
 			df.NA,
-			df.RCodeDesc,
 			df.RCode)
 	}
 	return flags
 }
 
-func newDNSFlags(flags uint16) *DNSFlags {
-	qr := uint8(flags >> 15)
-	opcode := uint8((flags >> 11) & 15)
-	rcode := uint8(flags & 15)
+func NewDNSFlags(qr QRFlag, op OpCode, aa, tc, rd, ra, z, au, na bool, rc RCode) *DNSFlags {
+	df := &DNSFlags{
+		QR:     NewDNSQRFlag(qr),
+		OPCode: NewDNSOpCode(op),
+		AA:     bTou8(aa),
+		TC:     bTou8(tc),
+		RD:     bTou8(rd),
+		RA:     bTou8(ra),
+		Z:      bTou8(z),
+		AU:     bTou8(au),
+		NA:     bTou8(na),
+		RCode:  NewDNSRCode(rc),
+	}
+	var flags uint16
+	flags = flags | uint16(df.QR.Val)<<15
+	flags = flags | uint16(df.OPCode.Val)<<11
+	flags = flags | uint16(df.AA)<<10
+	flags = flags | uint16(df.TC)<<9
+	flags = flags | uint16(df.RD)<<8
+	flags = flags | uint16(df.RA)<<7
+	flags = flags | uint16(df.Z)<<6
+	flags = flags | uint16(df.AU)<<5
+	flags = flags | uint16(df.NA)<<4
+	flags = flags | uint16(df.RCode.Val)
+	df.Raw = flags
+	return df
+}
+
+func NewDNSFlagsFromRaw(flags uint16) *DNSFlags {
 	return &DNSFlags{
-		Raw:        flags,
-		QR:         qr,
-		QRDesc:     qrdesc(qr),
-		OPCode:     opcode,
-		OPCodeDesc: opcdesc(opcode),
-		AA:         uint8((flags >> 10) & 1),
-		TC:         uint8((flags >> 9) & 1),
-		RD:         uint8((flags >> 8) & 1),
-		RA:         uint8((flags >> 7) & 1),
-		Z:          uint8((flags >> 6) & 1),
-		AU:         uint8((flags >> 5) & 1),
-		NA:         uint8((flags >> 4) & 1),
-		RCode:      rcode,
-		RCodeDesc:  rcdesc(rcode),
+		Raw:    flags,
+		QR:     NewDNSQRFlag(QRFlag(flags >> 15)),
+		OPCode: NewDNSOpCode(OpCode((flags >> 11) & 15)),
+		AA:     uint8((flags >> 10) & 1),
+		TC:     uint8((flags >> 9) & 1),
+		RD:     uint8((flags >> 8) & 1),
+		RA:     uint8((flags >> 7) & 1),
+		Z:      uint8((flags >> 6) & 1),
+		AU:     uint8((flags >> 5) & 1),
+		NA:     uint8((flags >> 4) & 1),
+		RCode:  NewDNSRCode(RCode(flags & 15)),
 	}
 }
 
-func qrdesc(qr uint8) string {
-	var qrdesc string
+func qrdesc(qr QRFlag) *DNSQRFlag {
+	var qrdesc *DNSQRFlag
 	switch qr {
 	case 0:
-		qrdesc = "query"
+		qrdesc = DNSQuery
 	case 1:
-		qrdesc = "reply"
+		qrdesc = DNSReply
+	default:
+		qrdesc = &DNSQRFlag{Val: qr, Desc: "Unknown"}
 	}
 	return qrdesc
 }
 
 // https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-5
-func opcdesc(opcode uint8) string {
-	var opcdesc string
+func getopcode(opcode OpCode) *DNSOpCode {
+	var oc *DNSOpCode
 	switch opcode {
 	case 0:
-		opcdesc = "Standard query"
+		oc = DNSOpCodeQuery
 	case 1:
-		opcdesc = "Inverse query"
+		oc = DNSOpCodeInvQuery
 	case 2:
-		opcdesc = "Server status request"
+		oc = DNSOpCodeStatus
 	case 4:
-		opcdesc = "Notify"
+		oc = DNSOpCodeNotify
 	case 5:
-		opcdesc = "Update"
+		oc = DNSOpCodeUpdate
 	case 6:
-		opcdesc = "Stateful operation"
+		oc = DNSOpCodeDSO
 	default:
-		opcdesc = "Unknown"
+		oc = &DNSOpCode{Val: opcode, Desc: "Unknown"}
 	}
-	return opcdesc
+	return oc
 }
 
 // https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-6
-func rcdesc(rcode uint8) string {
-	var rcdesc string
+func rcdesc(rcode RCode) *DNSRCode {
+	var rcdesc *DNSRCode
 	switch rcode {
-	case 0:
-		rcdesc = "No error"
-	case 1:
-		rcdesc = "Format error"
-	case 2:
-		rcdesc = "Server failed to complete the DNS request"
-	case 3:
-		rcdesc = "Domain name does not exist"
-	case 4:
-		rcdesc = "Function not implemented"
-	case 5:
-		rcdesc = "The server refused to answer for the query"
-	case 6:
-		rcdesc = "Name that should not exist, does exist"
-	case 7:
-		rcdesc = "RRset that should not exist, does exist"
-	case 8:
-		rcdesc = "Server not authoritative for the zone"
-	case 9:
-		rcdesc = "Server Not Authoritative for zone"
-	case 10:
-		rcdesc = "Name not contained in zone"
-	case 11:
-		rcdesc = "DSO-TYPE Not Implemented"
-	case 16:
-		rcdesc = "Bad OPT Version/TSIG Signature Failure"
-	case 17:
-		rcdesc = "Key not recognizede"
-	case 18:
-		rcdesc = "Signature out of time window"
-	case 19:
-		rcdesc = "Bad TKEY Mode"
-	case 20:
-		rcdesc = "Duplicate key name"
-	case 21:
-		rcdesc = "Algorithm not supported"
-	case 22:
-		rcdesc = "Bad Truncation"
-	case 23:
-		rcdesc = "Bad/missing Server Cookie"
+	case RCodeNoError:
+		rcdesc = DNSRCodeNoError
+	case RCodeFormatError:
+		rcdesc = DNSRCodeFormatErr
+	case RCodeServerFail:
+		rcdesc = DNSRCodeServFail
+	case RCodeNameError:
+		rcdesc = DNSRCodeNXDomain
+	case RCodeNotImpl:
+		rcdesc = DNSRCodeNotImpl
+	case RCodeRefused:
+		rcdesc = DNSRCodeRefused
+	case RCodeYXDomain:
+		rcdesc = DNSRCodeYXDomain
+	case RCodeYXRRSet:
+		rcdesc = DNSRCodeYXRRSet
+	case RCodeNXRRSet:
+		rcdesc = DNSRCodeNXRRSet
+	case RCodeNotAuth:
+		rcdesc = DNSRCodeNotAuth
+	case RCodeNotZone:
+		rcdesc = DNSRCodeNotZone
+	case RCodeDSOTypeNI:
+		rcdesc = DNSRCodeDSOTypeNI
+	case RCodeBadVers:
+		rcdesc = DNSRCodeBadVers
+	case RCodeBadKey:
+		rcdesc = DNSRCodeBadKey
+	case RCodeBadTime:
+		rcdesc = DNSRCodeBadTime
+	case RCodeBadMode:
+		rcdesc = DNSRCodeBadMode
+	case RCodeBadName:
+		rcdesc = DNSRCodeBadName
+	case RCodeBadAlg:
+		rcdesc = DNSRCodeBadAlg
+	case RCodeBadTrunc:
+		rcdesc = DNSRCodeBadTrunc
+	case RCodeBadCookie:
+		rcdesc = DNSRCodeBadCookie
 	default:
-		rcdesc = "Unknown"
+		rcdesc = &DNSRCode{Val: rcode, Desc: "Unknown"}
 	}
 	return rcdesc
 }
@@ -208,7 +345,7 @@ func (d *DNSMessage) String() string {
 
 func (d *DNSMessage) Summary() string {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "DNS Message: %s (%s) %#04x ", d.Flags.OPCodeDesc, d.Flags.QRDesc, d.TransactionID)
+	fmt.Fprintf(&sb, "DNS Message: %s (%s) %#04x ", d.Flags.OPCode.Desc, d.Flags.QR.Desc, d.TransactionID)
 	for _, rec := range d.Questions {
 		fmt.Fprintf(&sb, "%s %s ", rec.Type.Name, rec.Name)
 		if sb.Len() > maxLenSummary {
@@ -238,6 +375,8 @@ result:
 	return sb.String()[:maxLenSummary] + string(ellipsis)
 }
 
+// TODO: add MarshalBinary
+
 func (d *DNSMessage) UnmarshalBinary(data []byte) error {
 	if len(data) < headerSizeDNS {
 		return fmt.Errorf("minimum header size for DNS is %d bytes, got %d bytes", headerSizeDNS, len(data))
@@ -245,7 +384,7 @@ func (d *DNSMessage) UnmarshalBinary(data []byte) error {
 	buf := make([]byte, 0, len(data))
 	buf = append(buf, data...)
 	d.TransactionID = binary.BigEndian.Uint16(buf[0:2])
-	d.Flags = newDNSFlags(binary.BigEndian.Uint16(buf[2:4]))
+	d.Flags = NewDNSFlagsFromRaw(binary.BigEndian.Uint16(buf[2:4]))
 	d.QDCount = binary.BigEndian.Uint16(buf[4:6])
 	d.ANCount = binary.BigEndian.Uint16(buf[6:8])
 	d.NSCount = binary.BigEndian.Uint16(buf[8:10])
@@ -328,7 +467,7 @@ type dnsReplyWrapper struct {
 }
 
 func (d *DNSMessage) MarshalJSON() ([]byte, error) {
-	if d.Flags.QR == 0 {
+	if d.Flags.QR == DNSReply {
 		return json.Marshal(&dnsQueryWrapper{Query: (*dnsMessageAlias)(d)})
 	}
 	return json.Marshal(&dnsReplyWrapper{Reply: (*dnsMessageAlias)(d)})
