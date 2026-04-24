@@ -674,6 +674,7 @@ func (rt *ResourceRecord) ToBytes() []byte {
 }
 
 func (rt *ResourceRecord) Summary() string {
+	// TODO: add Summary to RData
 	var summary string
 	switch rd := rt.RData.(type) {
 	case *RDataA:
@@ -722,6 +723,8 @@ func (qe *QueryEntry) ToBytes() []byte {
 	return b
 }
 
+var _ RData = &RDataA{}
+
 type RDataA struct {
 	Address netip.Addr `json:"address"`
 }
@@ -738,6 +741,8 @@ func (d *RDataA) ToBytes() []byte {
 	b, _ := d.MarshalBinary()
 	return b
 }
+
+var _ RData = &RDataNS{}
 
 type RDataNS struct {
 	NsdName string `json:"ns"`
@@ -756,6 +761,8 @@ func (d *RDataNS) ToBytes() []byte {
 	return b
 }
 
+var _ RData = &RDataCNAME{}
+
 type RDataCNAME struct {
 	CName string `json:"cname"`
 }
@@ -772,6 +779,8 @@ func (d *RDataCNAME) ToBytes() []byte {
 	b, _ := d.MarshalBinary()
 	return b
 }
+
+var _ RData = &RDataSOA{}
 
 type RDataSOA struct {
 	PrimaryNS            string `json:"primary-nameserver"`
@@ -817,6 +826,8 @@ func (d *RDataSOA) ToBytes() []byte {
 	return b
 }
 
+var _ RData = &RDataMX{}
+
 type RDataMX struct {
 	Preference uint16 `json:"preference"`
 	Exchange   string `json:"exchange"`
@@ -838,6 +849,8 @@ func (d *RDataMX) ToBytes() []byte {
 	return b
 }
 
+var _ RData = &RDataTXT{}
+
 type RDataTXT struct {
 	TxtData string `json:"txt-data"`
 }
@@ -855,6 +868,8 @@ func (d *RDataTXT) ToBytes() []byte {
 	return b
 }
 
+var _ RData = &RDataAAAA{}
+
 type RDataAAAA struct {
 	Address netip.Addr `json:"address"`
 }
@@ -871,6 +886,8 @@ func (d *RDataAAAA) ToBytes() []byte {
 	b, _ := d.MarshalBinary()
 	return b
 }
+
+var _ RData = &RDataOPT{}
 
 type RDataOPT struct {
 	UDPPayloadSize     uint16 `json:"udp-payload-size"`
@@ -996,6 +1013,8 @@ func (sp *SvcParam) ToBytes() []byte {
 	return b
 }
 
+var _ RData = &RDataHTTPS{}
+
 type RDataHTTPS struct {
 	SvcPriority uint16      `json:"svc-priority"`
 	Length      int         `json:"length"`
@@ -1046,6 +1065,8 @@ func (d *RDataHTTPS) ToBytes() []byte {
 	b, _ := d.MarshalBinary()
 	return b
 }
+
+var _ RData = &RDataUnknown{}
 
 type RDataUnknown struct {
 	Data string `json:"data"`
