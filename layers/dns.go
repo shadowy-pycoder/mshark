@@ -362,7 +362,13 @@ func (d *DNSMessage) String() string {
 
 func (d *DNSMessage) Summary() string {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "DNS Message: %s (%s) %#04x ", d.Flags.OPCode.Desc, d.Flags.QR.Desc, d.TransactionID)
+
+	switch d.Flags.QR {
+	case DNSReply:
+		fmt.Fprintf(&sb, "DNS Message: %s (%s) %s %#04x ", d.Flags.OPCode.Desc, d.Flags.QR.Desc, d.Flags.RCode.Desc, d.TransactionID)
+	default:
+		fmt.Fprintf(&sb, "DNS Message: %s (%s) %#04x ", d.Flags.OPCode.Desc, d.Flags.QR.Desc, d.TransactionID)
+	}
 	for _, rec := range d.Questions {
 		fmt.Fprintf(&sb, "%s %s ", rec.Type.Name, rec.Name)
 		if sb.Len() > maxLenSummary {
