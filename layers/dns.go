@@ -547,7 +547,7 @@ func (c *RecordClass) String() string {
 	return fmt.Sprintf("%s (%d)", c.Name, c.Val)
 }
 
-func newRecordClass(cls uint16) *RecordClass {
+func NewRecordClass(cls uint16) *RecordClass {
 	return &RecordClass{Name: className(cls), Val: cls}
 }
 
@@ -569,44 +569,70 @@ func className(cls uint16) string {
 	return cname
 }
 
+type RecType uint16
+
+const (
+	RecTypeA     RecType = 1
+	RecTypeNS    RecType = 2
+	RecTypeCNAME RecType = 5
+	RecTypeSOA   RecType = 6
+	RecTypeMX    RecType = 15
+	RecTypeTXT   RecType = 16
+	RecTypeAAAA  RecType = 28
+	RecTypeOPT   RecType = 41
+	RecTypeHTTPS RecType = 65
+)
+
 type RecordType struct {
-	Name string `json:"name"`
-	Val  uint16 `json:"val"`
+	Name string  `json:"name"`
+	Val  RecType `json:"val"`
 }
 
 func (rt *RecordType) String() string {
 	return fmt.Sprintf("%s (%d)", rt.Name, rt.Val) // TODO: new line
 }
 
-func newRecordType(typ uint16) *RecordType {
-	return &RecordType{Name: typeName(typ), Val: typ}
+var (
+	DNSRecTypeA     *RecordType = &RecordType{Name: "A", Val: RecTypeA}
+	DNSRecTypeNS    *RecordType = &RecordType{Name: "NS", Val: RecTypeNS}
+	DNSRecTypeCNAME *RecordType = &RecordType{Name: "CNAME", Val: RecTypeCNAME}
+	DNSRecTypeSOA   *RecordType = &RecordType{Name: "SOA", Val: RecTypeSOA}
+	DNSRecTypeMX    *RecordType = &RecordType{Name: "MX", Val: RecTypeMX}
+	DNSRecTypeTXT   *RecordType = &RecordType{Name: "TXT", Val: RecTypeTXT}
+	DNSRecTypeAAAA  *RecordType = &RecordType{Name: "AAAA", Val: RecTypeAAAA}
+	DNSRecTypeOPT   *RecordType = &RecordType{Name: "OPT", Val: RecTypeOPT}
+	DNSRecTypeHTTPS *RecordType = &RecordType{Name: "HTTPS", Val: RecTypeHTTPS}
+)
+
+func NewRecordType(rt RecType) *RecordType {
+	return getrectype(rt)
 }
 
-func typeName(typ uint16) string {
-	var typedesc string
-	switch typ {
-	case 1:
-		typedesc = "A"
-	case 2:
-		typedesc = "NS"
-	case 5:
-		typedesc = "CNAME"
-	case 6:
-		typedesc = "SOA"
-	case 15:
-		typedesc = "MX"
-	case 16:
-		typedesc = "TXT"
-	case 28:
-		typedesc = "AAAA"
-	case 41:
-		typedesc = "OPT"
-	case 65:
-		typedesc = "HTTPS"
+func getrectype(rt RecType) *RecordType {
+	var typ *RecordType
+	switch rt {
+	case RecTypeA:
+		typ = DNSRecTypeA
+	case RecTypeNS:
+		typ = DNSRecTypeNS
+	case RecTypeCNAME:
+		typ = DNSRecTypeCNAME
+	case RecTypeSOA:
+		typ = DNSRecTypeSOA
+	case RecTypeMX:
+		typ = DNSRecTypeMX
+	case RecTypeTXT:
+		typ = DNSRecTypeTXT
+	case RecTypeAAAA:
+		typ = DNSRecTypeAAAA
+	case RecTypeOPT:
+		typ = DNSRecTypeOPT
+	case RecTypeHTTPS:
+		typ = DNSRecTypeHTTPS
 	default:
-		typedesc = "Unknown"
+		typ = &RecordType{Name: "Unknown", Val: rt}
 	}
-	return typedesc
+	return typ
 }
 
 type RData interface {
@@ -634,13 +660,13 @@ func (rt *ResourceRecord) String() string {
 		}
 		record = fmt.Sprintf(`  - %s:
     - Name: %s
-    - Type: %s (%d)
+    - Type: %s
     - %s
-`, name, rt.Name, rt.Type.Name, rt.Type.Val, rt.RData)
+`, name, rt.Name, rt.Type, rt.RData)
 	default:
 		record = fmt.Sprintf(`  - %s:
     - Name: %s
-    - Type: %s (%d)
+    - Type: %s
     - Class: %s (%d)
     - TTL: %d
     - Data Length: %d
@@ -648,8 +674,7 @@ func (rt *ResourceRecord) String() string {
 `,
 			rt.Name,
 			rt.Name,
-			rt.Type.Name,
-			rt.Type.Val,
+			rt.Type,
 			rt.Class.Name,
 			rt.Class.Val,
 			rt.TTL,
@@ -711,9 +736,9 @@ type QueryEntry struct {
 func (qe *QueryEntry) String() string {
 	return fmt.Sprintf(`  - %s:
     - Name: %s
-    - Type: %s (%d)
+    - Type: %s
     - Class: %s (%d)
-`, qe.Name, qe.Name, qe.Type.Name, qe.Type.Val, qe.Class.Name, qe.Class.Val)
+`, qe.Name, qe.Name, qe.Type, qe.Class.Name, qe.Class.Val)
 }
 
 func (qe *QueryEntry) MarshalBinary() ([]byte, error) {
@@ -1146,8 +1171,8 @@ func parseQuery(payload, tail []byte) (*QueryEntry, []byte, error) {
 	tail = tail[4:]
 	return &QueryEntry{
 		Name:  domain,
-		Type:  newRecordType(typ),
-		Class: newRecordClass(cls),
+		Type:  NewRecordType(RecType(typ)),
+		Class: NewRecordClass(cls),
 	}, tail, nil
 }
 
@@ -1323,12 +1348,12 @@ func parseResourceRecord(payload, tail []byte) (*ResourceRecord, []byte, error) 
 		domain = "Root"
 		ttl = 0
 	} else {
-		recordClass = newRecordClass(cls)
+		recordClass = NewRecordClass(cls)
 		rdlLength = rdl
 	}
 	return &ResourceRecord{
 		Name:     domain,
-		Type:     newRecordType(typ),
+		Type:     NewRecordType(RecType(typ)),
 		Class:    recordClass,
 		TTL:      ttl,
 		RDLength: rdlLength,
