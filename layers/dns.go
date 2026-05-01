@@ -1292,7 +1292,7 @@ func parseRData(payload, tail []byte, typ uint16, rdl int) (RData, []byte, error
 			target = "Root"
 			ttail = ttail[3:]
 		} else {
-			target, ttail, err = extractDomain(payload, ttail)
+			target, ttail, err = extractDomain(payload, ttail[2:])
 			if err != nil {
 				return nil, nil, err
 			}
