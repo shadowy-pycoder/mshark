@@ -1,6 +1,8 @@
 package layers
 
 import (
+	"bytes"
+	"encoding"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -11,36 +13,152 @@ import (
 
 const headerSizeDNS = 12
 
+type OpCode uint8
+
+const (
+	OpCodeQuery    OpCode = 0
+	OpCodeInvQuery OpCode = 1
+	OpCodeStatus   OpCode = 2
+	OpCodeNotify   OpCode = 4
+	OpCodeUpdate   OpCode = 5
+	OpCodeDSO      OpCode = 6
+)
+
+type DNSOpCode struct {
+	Val  OpCode `json:"val"`
+	Desc string `json:"desc"`
+}
+
+func (do *DNSOpCode) String() string {
+	return fmt.Sprintf("%s (%d)", do.Desc, do.Val)
+}
+
+func NewDNSOpCode(opcode OpCode) *DNSOpCode {
+	return getopcode(opcode)
+}
+
+var (
+	DNSOpCodeQuery    *DNSOpCode = &DNSOpCode{Val: OpCodeQuery, Desc: "Standard query"}
+	DNSOpCodeInvQuery *DNSOpCode = &DNSOpCode{Val: OpCodeInvQuery, Desc: "Inverse query"}
+	DNSOpCodeStatus   *DNSOpCode = &DNSOpCode{Val: OpCodeStatus, Desc: "Server status request"}
+	DNSOpCodeNotify   *DNSOpCode = &DNSOpCode{Val: OpCodeNotify, Desc: "Notify"}
+	DNSOpCodeUpdate   *DNSOpCode = &DNSOpCode{Val: OpCodeUpdate, Desc: "Update"}
+	DNSOpCodeDSO      *DNSOpCode = &DNSOpCode{Val: OpCodeDSO, Desc: "Stateful operation"}
+)
+
+type QRFlag uint8
+
+const (
+	QRFlagQuery QRFlag = 0
+	QRFlagReply QRFlag = 1
+)
+
+type DNSQRFlag struct {
+	Val  QRFlag `json:"val"`
+	Desc string `json:"desc"`
+}
+
+var (
+	DNSQuery *DNSQRFlag = &DNSQRFlag{Val: QRFlagQuery, Desc: "query"}
+	DNSReply *DNSQRFlag = &DNSQRFlag{Val: QRFlagReply, Desc: "reply"}
+)
+
+func (qr *DNSQRFlag) String() string {
+	return fmt.Sprintf("%s (%d)", qr.Desc, qr.Val)
+}
+
+func NewDNSQRFlag(qr QRFlag) *DNSQRFlag {
+	return qrdesc(qr)
+}
+
+type RCode uint8
+
+const (
+	RCodeNoError     RCode = 0
+	RCodeFormatError RCode = 1
+	RCodeServerFail  RCode = 2
+	RCodeNameError   RCode = 3
+	RCodeNotImpl     RCode = 4
+	RCodeRefused     RCode = 5
+	RCodeYXDomain    RCode = 6
+	RCodeYXRRSet     RCode = 7
+	RCodeNXRRSet     RCode = 8
+	RCodeNotAuth     RCode = 9
+	RCodeNotZone     RCode = 10
+	RCodeDSOTypeNI   RCode = 11
+	RCodeBadVers     RCode = 16
+	RCodeBadKey      RCode = 17
+	RCodeBadTime     RCode = 18
+	RCodeBadMode     RCode = 19
+	RCodeBadName     RCode = 20
+	RCodeBadAlg      RCode = 21
+	RCodeBadTrunc    RCode = 22
+	RCodeBadCookie   RCode = 23
+)
+
+type DNSRCode struct {
+	Val  RCode  `json:"val"`
+	Desc string `json:"desc"`
+}
+
+var (
+	DNSRCodeNoError   = &DNSRCode{Val: RCodeNoError, Desc: "No error"}
+	DNSRCodeFormatErr = &DNSRCode{Val: RCodeFormatError, Desc: "Format error"}
+	DNSRCodeServFail  = &DNSRCode{Val: RCodeServerFail, Desc: "Server failed to complete the DNS request"}
+	DNSRCodeNXDomain  = &DNSRCode{Val: RCodeNameError, Desc: "Domain name does not exist"}
+	DNSRCodeNotImpl   = &DNSRCode{Val: RCodeNotImpl, Desc: "Function not implemented"}
+	DNSRCodeRefused   = &DNSRCode{Val: RCodeRefused, Desc: "The server refused to answer for the query"}
+	DNSRCodeYXDomain  = &DNSRCode{Val: RCodeYXDomain, Desc: "Name that should not exist, does exist"}
+	DNSRCodeYXRRSet   = &DNSRCode{Val: RCodeYXRRSet, Desc: "RRset that should not exist, does exist"}
+	DNSRCodeNXRRSet   = &DNSRCode{Val: RCodeNXRRSet, Desc: "Server not authoritative for the zone"}
+	DNSRCodeNotAuth   = &DNSRCode{Val: RCodeNotAuth, Desc: "Server Not Authoritative for zone"}
+	DNSRCodeNotZone   = &DNSRCode{Val: RCodeNotZone, Desc: "Name not contained in zone"}
+	DNSRCodeDSOTypeNI = &DNSRCode{Val: RCodeDSOTypeNI, Desc: "DSO-TYPE Not Implemented"}
+	DNSRCodeBadVers   = &DNSRCode{Val: RCodeBadVers, Desc: "Bad OPT Version/TSIG Signature Failure"}
+	DNSRCodeBadKey    = &DNSRCode{Val: RCodeBadKey, Desc: "Key not recognized"}
+	DNSRCodeBadTime   = &DNSRCode{Val: RCodeBadTime, Desc: "Signature out of time window"}
+	DNSRCodeBadMode   = &DNSRCode{Val: RCodeBadMode, Desc: "Bad TKEY Mode"}
+	DNSRCodeBadName   = &DNSRCode{Val: RCodeBadName, Desc: "Duplicate key name"}
+	DNSRCodeBadAlg    = &DNSRCode{Val: RCodeBadAlg, Desc: "Algorithm not supported"}
+	DNSRCodeBadTrunc  = &DNSRCode{Val: RCodeBadTrunc, Desc: "Bad Truncation"}
+	DNSRCodeBadCookie = &DNSRCode{Val: RCodeBadCookie, Desc: "Bad/missing Server Cookie"}
+)
+
+func (rc *DNSRCode) String() string {
+	return fmt.Sprintf("%s (%d)", rc.Desc, rc.Val)
+}
+
+func NewDNSRCode(rc RCode) *DNSRCode {
+	return rcdesc(rc)
+}
+
 type DNSFlags struct {
-	Raw        uint16 `json:"raw"`
-	QR         uint8  `json:"qr"`     // Indicates if the message is a query (0) or a reply (1).
-	QRDesc     string `json:"qrdesc"` // Query (0) or Reply (1)
-	OPCode     uint8  `json:"opcode"` // https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-5
-	OPCodeDesc string `json:"opcodedesc"`
-	AA         uint8  `json:"aa"`    // Authoritative Answer, in a response, indicates if the DNS server is authoritative for the queried hostname.
-	TC         uint8  `json:"tc"`    // TrunCation, indicates that this message was truncated due to excessive length.
-	RD         uint8  `json:"rd"`    // Recursion Desired, indicates if the client means a recursive query.
-	RA         uint8  `json:"ra"`    // Recursion Available, in a response, indicates if the replying DNS server supports recursion.
-	Z          uint8  `json:"z"`     // Zero, reserved for future use.
-	AU         uint8  `json:"au"`    // Indicates if answer/authority portion was authenticated by the server.
-	NA         uint8  `json:"na"`    // Indicates if non-authenticated data is accepatable.
-	RCode      uint8  `json:"rcode"` // https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-6
-	RCodeDesc  string `json:"rcodedesc"`
+	Raw    uint16     `json:"raw"`
+	QR     *DNSQRFlag `json:"qr"`     // Indicates if the message is a query (0) or a reply (1).
+	OPCode *DNSOpCode `json:"opcode"` // https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-5
+	AA     uint8      `json:"aa"`     // Authoritative Answer, in a response, indicates if the DNS server is authoritative for the queried hostname.
+	TC     uint8      `json:"tc"`     // TrunCation, indicates that this message was truncated due to excessive length.
+	RD     uint8      `json:"rd"`     // Recursion Desired, indicates if the client means a recursive query.
+	RA     uint8      `json:"ra"`     // Recursion Available, in a response, indicates if the replying DNS server supports recursion.
+	Z      uint8      `json:"z"`      // Zero, reserved for future use.
+	AU     uint8      `json:"au"`     // Indicates if answer/authority portion was authenticated by the server.
+	NA     uint8      `json:"na"`     // Indicates if non-authenticated data is accepatable.
+	RCode  *DNSRCode  `json:"rcode"`  // https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-6
 }
 
 func (df *DNSFlags) String() string {
 	var flags string
 	switch df.QR {
-	case 0:
-		flags = fmt.Sprintf(`  - Response: Message is a %s (%d)
-  - Opcode: %s (%d)
+	case DNSQuery:
+		flags = fmt.Sprintf(`  - Response: Message is a %s
+  - Opcode: %s
   - Truncated: %d
   - Recursion desired: %d
   - Reserved: %d
-  - Non-authenticated data: %d`, df.QRDesc, df.QR, df.OPCodeDesc, df.OPCode, df.TC, df.RD, df.Z, df.NA)
-	case 1:
-		flags = fmt.Sprintf(`  - Response: Message is a %s (%d)
-  - Opcode: %s (%d)
+  - Non-authenticated data: %d`, df.QR, df.OPCode, df.TC, df.RD, df.Z, df.NA)
+	case DNSReply:
+		flags = fmt.Sprintf(`  - Response: Message is a %s
+  - Opcode: %s
   - Authoritative: %d
   - Truncated: %d
   - Recursion desired: %d
@@ -48,10 +166,8 @@ func (df *DNSFlags) String() string {
   - Reserved: %d
   - Answer authenticated: %d
   - Non-authenticated data: %d
-  - Reply code: %s (%d)`,
-			df.QRDesc,
+  - Reply code: %s`,
 			df.QR,
-			df.OPCodeDesc,
 			df.OPCode,
 			df.AA,
 			df.TC,
@@ -60,115 +176,153 @@ func (df *DNSFlags) String() string {
 			df.Z,
 			df.AU,
 			df.NA,
-			df.RCodeDesc,
 			df.RCode)
 	}
 	return flags
 }
 
-func newDNSFlags(flags uint16) *DNSFlags {
-	qr := uint8(flags >> 15)
-	opcode := uint8((flags >> 11) & 15)
-	rcode := uint8(flags & 15)
+func NewDNSFlags(qr QRFlag, op OpCode, aa, tc, rd, ra, z, au, na bool, rc RCode) *DNSFlags {
+	df := &DNSFlags{
+		QR:     NewDNSQRFlag(qr),
+		OPCode: NewDNSOpCode(op),
+		AA:     bTou8(aa),
+		TC:     bTou8(tc),
+		RD:     bTou8(rd),
+		RA:     bTou8(ra),
+		Z:      bTou8(z),
+		AU:     bTou8(au),
+		NA:     bTou8(na),
+		RCode:  NewDNSRCode(rc),
+	}
+	var flags uint16
+	flags |= uint16(df.QR.Val) << 15
+	flags |= uint16(df.OPCode.Val) << 11
+	flags |= uint16(df.AA) << 10
+	flags |= uint16(df.TC) << 9
+	flags |= uint16(df.RD) << 8
+	flags |= uint16(df.RA) << 7
+	flags |= uint16(df.Z) << 6
+	flags |= uint16(df.AU) << 5
+	flags |= uint16(df.NA) << 4
+	flags |= uint16(df.RCode.Val)
+	df.Raw = flags
+	return df
+}
+
+func NewDNSFlagsFromRaw(flags uint16) *DNSFlags {
 	return &DNSFlags{
-		Raw:        flags,
-		QR:         qr,
-		QRDesc:     qrdesc(qr),
-		OPCode:     opcode,
-		OPCodeDesc: opcdesc(opcode),
-		AA:         uint8((flags >> 10) & 1),
-		TC:         uint8((flags >> 9) & 1),
-		RD:         uint8((flags >> 8) & 1),
-		RA:         uint8((flags >> 7) & 1),
-		Z:          uint8((flags >> 6) & 1),
-		AU:         uint8((flags >> 5) & 1),
-		NA:         uint8((flags >> 4) & 1),
-		RCode:      rcode,
-		RCodeDesc:  rcdesc(rcode),
+		Raw:    flags,
+		QR:     NewDNSQRFlag(QRFlag(flags >> 15)),
+		OPCode: NewDNSOpCode(OpCode((flags >> 11) & 15)),
+		AA:     uint8((flags >> 10) & 1),
+		TC:     uint8((flags >> 9) & 1),
+		RD:     uint8((flags >> 8) & 1),
+		RA:     uint8((flags >> 7) & 1),
+		Z:      uint8((flags >> 6) & 1),
+		AU:     uint8((flags >> 5) & 1),
+		NA:     uint8((flags >> 4) & 1),
+		RCode:  NewDNSRCode(RCode(flags & 15)),
 	}
 }
 
-func qrdesc(qr uint8) string {
-	var qrdesc string
+func qrdesc(qr QRFlag) *DNSQRFlag {
+	var qrdesc *DNSQRFlag
 	switch qr {
 	case 0:
-		qrdesc = "query"
+		qrdesc = DNSQuery
 	case 1:
-		qrdesc = "reply"
+		qrdesc = DNSReply
+	default:
+		qrdesc = &DNSQRFlag{Val: qr, Desc: "Unknown"}
 	}
 	return qrdesc
 }
 
 // https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-5
-func opcdesc(opcode uint8) string {
-	var opcdesc string
+func getopcode(opcode OpCode) *DNSOpCode {
+	var oc *DNSOpCode
 	switch opcode {
 	case 0:
-		opcdesc = "Standard query"
+		oc = DNSOpCodeQuery
 	case 1:
-		opcdesc = "Inverse query"
+		oc = DNSOpCodeInvQuery
 	case 2:
-		opcdesc = "Server status request"
+		oc = DNSOpCodeStatus
 	case 4:
-		opcdesc = "Notify"
+		oc = DNSOpCodeNotify
 	case 5:
-		opcdesc = "Update"
+		oc = DNSOpCodeUpdate
 	case 6:
-		opcdesc = "Stateful operation"
+		oc = DNSOpCodeDSO
 	default:
-		opcdesc = "Unknown"
+		oc = &DNSOpCode{Val: opcode, Desc: "Unknown"}
 	}
-	return opcdesc
+	return oc
 }
 
 // https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-6
-func rcdesc(rcode uint8) string {
-	var rcdesc string
+func rcdesc(rcode RCode) *DNSRCode {
+	var rcdesc *DNSRCode
 	switch rcode {
-	case 0:
-		rcdesc = "No error"
-	case 1:
-		rcdesc = "Format error"
-	case 2:
-		rcdesc = "Server failed to complete the DNS request"
-	case 3:
-		rcdesc = "Domain name does not exist"
-	case 4:
-		rcdesc = "Function not implemented"
-	case 5:
-		rcdesc = "The server refused to answer for the query"
-	case 6:
-		rcdesc = "Name that should not exist, does exist"
-	case 7:
-		rcdesc = "RRset that should not exist, does exist"
-	case 8:
-		rcdesc = "Server not authoritative for the zone"
-	case 9:
-		rcdesc = "Server Not Authoritative for zone"
-	case 10:
-		rcdesc = "Name not contained in zone"
-	case 11:
-		rcdesc = "DSO-TYPE Not Implemented"
-	case 16:
-		rcdesc = "Bad OPT Version/TSIG Signature Failure"
-	case 17:
-		rcdesc = "Key not recognizede"
-	case 18:
-		rcdesc = "Signature out of time window"
-	case 19:
-		rcdesc = "Bad TKEY Mode"
-	case 20:
-		rcdesc = "Duplicate key name"
-	case 21:
-		rcdesc = "Algorithm not supported"
-	case 22:
-		rcdesc = "Bad Truncation"
-	case 23:
-		rcdesc = "Bad/missing Server Cookie"
+	case RCodeNoError:
+		rcdesc = DNSRCodeNoError
+	case RCodeFormatError:
+		rcdesc = DNSRCodeFormatErr
+	case RCodeServerFail:
+		rcdesc = DNSRCodeServFail
+	case RCodeNameError:
+		rcdesc = DNSRCodeNXDomain
+	case RCodeNotImpl:
+		rcdesc = DNSRCodeNotImpl
+	case RCodeRefused:
+		rcdesc = DNSRCodeRefused
+	case RCodeYXDomain:
+		rcdesc = DNSRCodeYXDomain
+	case RCodeYXRRSet:
+		rcdesc = DNSRCodeYXRRSet
+	case RCodeNXRRSet:
+		rcdesc = DNSRCodeNXRRSet
+	case RCodeNotAuth:
+		rcdesc = DNSRCodeNotAuth
+	case RCodeNotZone:
+		rcdesc = DNSRCodeNotZone
+	case RCodeDSOTypeNI:
+		rcdesc = DNSRCodeDSOTypeNI
+	case RCodeBadVers:
+		rcdesc = DNSRCodeBadVers
+	case RCodeBadKey:
+		rcdesc = DNSRCodeBadKey
+	case RCodeBadTime:
+		rcdesc = DNSRCodeBadTime
+	case RCodeBadMode:
+		rcdesc = DNSRCodeBadMode
+	case RCodeBadName:
+		rcdesc = DNSRCodeBadName
+	case RCodeBadAlg:
+		rcdesc = DNSRCodeBadAlg
+	case RCodeBadTrunc:
+		rcdesc = DNSRCodeBadTrunc
+	case RCodeBadCookie:
+		rcdesc = DNSRCodeBadCookie
 	default:
-		rcdesc = "Unknown"
+		rcdesc = &DNSRCode{Val: rcode, Desc: "Unknown"}
 	}
 	return rcdesc
+}
+
+func NewDNSMessage(tid uint16, flags *DNSFlags, qd []*QueryEntry, an, ns, ar []*ResourceRecord) (*DNSMessage, error) {
+	return &DNSMessage{
+		TransactionID: tid,
+		Flags:         flags,
+		QDCount:       uint16(len(qd)),
+		ANCount:       uint16(len(an)),
+		NSCount:       uint16(len(ns)),
+		ARCount:       uint16(len(ar)),
+		Questions:     qd,
+		AnswerRRs:     an,
+		AuthorityRRs:  ns,
+		AdditionalRRs: ar,
+	}, nil
 }
 
 type DNSMessage struct {
@@ -208,7 +362,13 @@ func (d *DNSMessage) String() string {
 
 func (d *DNSMessage) Summary() string {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "DNS Message: %s (%s) %#04x ", d.Flags.OPCodeDesc, d.Flags.QRDesc, d.TransactionID)
+
+	switch d.Flags.QR {
+	case DNSReply:
+		fmt.Fprintf(&sb, "DNS Message: %s (%s) %s %#04x ", d.Flags.OPCode.Desc, d.Flags.QR.Desc, d.Flags.RCode.Desc, d.TransactionID)
+	default:
+		fmt.Fprintf(&sb, "DNS Message: %s (%s) %#04x ", d.Flags.OPCode.Desc, d.Flags.QR.Desc, d.TransactionID)
+	}
 	for _, rec := range d.Questions {
 		fmt.Fprintf(&sb, "%s %s ", rec.Type.Name, rec.Name)
 		if sb.Len() > maxLenSummary {
@@ -238,6 +398,50 @@ result:
 	return sb.String()[:maxLenSummary] + string(ellipsis)
 }
 
+func (d *DNSMessage) MarshalBinary() ([]byte, error) {
+	b := make([]byte, headerSizeDNS)
+	binary.BigEndian.PutUint16(b[0:2], d.TransactionID)
+	binary.BigEndian.PutUint16(b[2:4], d.Flags.Raw)
+	binary.BigEndian.PutUint16(b[4:6], d.QDCount)
+	binary.BigEndian.PutUint16(b[6:8], d.ANCount)
+	binary.BigEndian.PutUint16(b[8:10], d.NSCount)
+	binary.BigEndian.PutUint16(b[10:headerSizeDNS], d.ARCount)
+	for _, r := range d.Questions {
+		rb, err := r.MarshalBinary()
+		if err != nil {
+			return nil, err
+		}
+		b = append(b, rb...)
+	}
+	for _, r := range d.AnswerRRs {
+		rb, err := r.MarshalBinary()
+		if err != nil {
+			return nil, err
+		}
+		b = append(b, rb...)
+	}
+	for _, r := range d.AuthorityRRs {
+		rb, err := r.MarshalBinary()
+		if err != nil {
+			return nil, err
+		}
+		b = append(b, rb...)
+	}
+	for _, r := range d.AdditionalRRs {
+		rb, err := r.MarshalBinary()
+		if err != nil {
+			return nil, err
+		}
+		b = append(b, rb...)
+	}
+	return b, nil
+}
+
+func (d *DNSMessage) ToBytes() []byte {
+	b, _ := d.MarshalBinary()
+	return b
+}
+
 func (d *DNSMessage) UnmarshalBinary(data []byte) error {
 	if len(data) < headerSizeDNS {
 		return fmt.Errorf("minimum header size for DNS is %d bytes, got %d bytes", headerSizeDNS, len(data))
@@ -245,7 +449,7 @@ func (d *DNSMessage) UnmarshalBinary(data []byte) error {
 	buf := make([]byte, 0, len(data))
 	buf = append(buf, data...)
 	d.TransactionID = binary.BigEndian.Uint16(buf[0:2])
-	d.Flags = newDNSFlags(binary.BigEndian.Uint16(buf[2:4]))
+	d.Flags = NewDNSFlagsFromRaw(binary.BigEndian.Uint16(buf[2:4]))
 	d.QDCount = binary.BigEndian.Uint16(buf[4:6])
 	d.ANCount = binary.BigEndian.Uint16(buf[6:8])
 	d.NSCount = binary.BigEndian.Uint16(buf[8:10])
@@ -328,7 +532,7 @@ type dnsReplyWrapper struct {
 }
 
 func (d *DNSMessage) MarshalJSON() ([]byte, error) {
-	if d.Flags.QR == 0 {
+	if d.Flags.QR == DNSReply {
 		return json.Marshal(&dnsQueryWrapper{Query: (*dnsMessageAlias)(d)})
 	}
 	return json.Marshal(&dnsReplyWrapper{Reply: (*dnsMessageAlias)(d)})
@@ -343,7 +547,7 @@ func (c *RecordClass) String() string {
 	return fmt.Sprintf("%s (%d)", c.Name, c.Val)
 }
 
-func newRecordClass(cls uint16) *RecordClass {
+func NewRecordClass(cls uint16) *RecordClass {
 	return &RecordClass{Name: className(cls), Val: cls}
 }
 
@@ -365,44 +569,76 @@ func className(cls uint16) string {
 	return cname
 }
 
+type RecType uint16
+
+const (
+	RecTypeA     RecType = 1
+	RecTypeNS    RecType = 2
+	RecTypeCNAME RecType = 5
+	RecTypeSOA   RecType = 6
+	RecTypeMX    RecType = 15
+	RecTypeTXT   RecType = 16
+	RecTypeAAAA  RecType = 28
+	RecTypeOPT   RecType = 41
+	RecTypeHTTPS RecType = 65
+)
+
 type RecordType struct {
-	Name string `json:"name"`
-	Val  uint16 `json:"val"`
+	Name string  `json:"name"`
+	Val  RecType `json:"val"`
 }
 
 func (rt *RecordType) String() string {
 	return fmt.Sprintf("%s (%d)", rt.Name, rt.Val) // TODO: new line
 }
 
-func newRecordType(typ uint16) *RecordType {
-	return &RecordType{Name: typeName(typ), Val: typ}
+var (
+	DNSRecTypeA     *RecordType = &RecordType{Name: "A", Val: RecTypeA}
+	DNSRecTypeNS    *RecordType = &RecordType{Name: "NS", Val: RecTypeNS}
+	DNSRecTypeCNAME *RecordType = &RecordType{Name: "CNAME", Val: RecTypeCNAME}
+	DNSRecTypeSOA   *RecordType = &RecordType{Name: "SOA", Val: RecTypeSOA}
+	DNSRecTypeMX    *RecordType = &RecordType{Name: "MX", Val: RecTypeMX}
+	DNSRecTypeTXT   *RecordType = &RecordType{Name: "TXT", Val: RecTypeTXT}
+	DNSRecTypeAAAA  *RecordType = &RecordType{Name: "AAAA", Val: RecTypeAAAA}
+	DNSRecTypeOPT   *RecordType = &RecordType{Name: "OPT", Val: RecTypeOPT}
+	DNSRecTypeHTTPS *RecordType = &RecordType{Name: "HTTPS", Val: RecTypeHTTPS}
+)
+
+func NewRecordType(rt RecType) *RecordType {
+	return getrectype(rt)
 }
 
-func typeName(typ uint16) string {
-	var typedesc string
-	switch typ {
-	case 1:
-		typedesc = "A"
-	case 2:
-		typedesc = "NS"
-	case 5:
-		typedesc = "CNAME"
-	case 6:
-		typedesc = "SOA"
-	case 15:
-		typedesc = "MX"
-	case 16:
-		typedesc = "TXT"
-	case 28:
-		typedesc = "AAAA"
-	case 41:
-		typedesc = "OPT"
-	case 65:
-		typedesc = "HTTPS"
+func getrectype(rt RecType) *RecordType {
+	var typ *RecordType
+	switch rt {
+	case RecTypeA:
+		typ = DNSRecTypeA
+	case RecTypeNS:
+		typ = DNSRecTypeNS
+	case RecTypeCNAME:
+		typ = DNSRecTypeCNAME
+	case RecTypeSOA:
+		typ = DNSRecTypeSOA
+	case RecTypeMX:
+		typ = DNSRecTypeMX
+	case RecTypeTXT:
+		typ = DNSRecTypeTXT
+	case RecTypeAAAA:
+		typ = DNSRecTypeAAAA
+	case RecTypeOPT:
+		typ = DNSRecTypeOPT
+	case RecTypeHTTPS:
+		typ = DNSRecTypeHTTPS
 	default:
-		typedesc = "Unknown"
+		typ = &RecordType{Name: "Unknown", Val: rt}
 	}
-	return typedesc
+	return typ
+}
+
+type RData interface {
+	fmt.Stringer
+	encoding.BinaryMarshaler
+	ToBytes() []byte
 }
 
 type ResourceRecord struct {
@@ -411,7 +647,7 @@ type ResourceRecord struct {
 	Class    *RecordClass `json:"record-class"` // Class code.
 	TTL      uint32       `json:"ttl"`          // Count of seconds that the RR stays valid.
 	RDLength uint16       `json:"rdata-length"` // Length of RData field (specified in octets).
-	RData    fmt.Stringer `json:"rdata"`        // Additional RR-specific data.
+	RData    RData        `json:"rdata"`        // Additional RR-specific data.
 }
 
 func (rt *ResourceRecord) String() string {
@@ -424,13 +660,13 @@ func (rt *ResourceRecord) String() string {
 		}
 		record = fmt.Sprintf(`  - %s:
     - Name: %s
-    - Type: %s (%d)
+    - Type: %s
     - %s
-`, name, rt.Name, rt.Type.Name, rt.Type.Val, rt.RData)
+`, name, rt.Name, rt.Type, rt.RData)
 	default:
 		record = fmt.Sprintf(`  - %s:
     - Name: %s
-    - Type: %s (%d)
+    - Type: %s
     - Class: %s (%d)
     - TTL: %d
     - Data Length: %d
@@ -438,8 +674,7 @@ func (rt *ResourceRecord) String() string {
 `,
 			rt.Name,
 			rt.Name,
-			rt.Type.Name,
-			rt.Type.Val,
+			rt.Type,
 			rt.Class.Name,
 			rt.Class.Val,
 			rt.TTL,
@@ -449,7 +684,28 @@ func (rt *ResourceRecord) String() string {
 	return record
 }
 
+func (rt *ResourceRecord) MarshalBinary() ([]byte, error) {
+	b := new(bytes.Buffer)
+	b.Write(encodeDomain(rt.Name))
+	binary.Write(b, binary.BigEndian, rt.Type.Val)
+	binary.Write(b, binary.BigEndian, rt.Class.Val)
+	binary.Write(b, binary.BigEndian, rt.TTL)
+	binary.Write(b, binary.BigEndian, rt.RDLength)
+	rdata, err := rt.RData.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+	b.Write(rdata)
+	return b.Bytes(), nil
+}
+
+func (rt *ResourceRecord) ToBytes() []byte {
+	b, _ := rt.MarshalBinary()
+	return b
+}
+
 func (rt *ResourceRecord) Summary() string {
+	// TODO: add Summary to RData
 	var summary string
 	switch rd := rt.RData.(type) {
 	case *RDataA:
@@ -480,10 +736,25 @@ type QueryEntry struct {
 func (qe *QueryEntry) String() string {
 	return fmt.Sprintf(`  - %s:
     - Name: %s
-    - Type: %s (%d)
+    - Type: %s
     - Class: %s (%d)
-`, qe.Name, qe.Name, qe.Type.Name, qe.Type.Val, qe.Class.Name, qe.Class.Val)
+`, qe.Name, qe.Name, qe.Type, qe.Class.Name, qe.Class.Val)
 }
+
+func (qe *QueryEntry) MarshalBinary() ([]byte, error) {
+	b := new(bytes.Buffer)
+	b.Write(encodeDomain(qe.Name))
+	binary.Write(b, binary.BigEndian, qe.Type.Val)
+	binary.Write(b, binary.BigEndian, qe.Class.Val)
+	return b.Bytes(), nil
+}
+
+func (qe *QueryEntry) ToBytes() []byte {
+	b, _ := qe.MarshalBinary()
+	return b
+}
+
+var _ RData = &RDataA{}
 
 type RDataA struct {
 	Address netip.Addr `json:"address"`
@@ -493,6 +764,17 @@ func (d *RDataA) String() string {
 	return fmt.Sprintf("Address: %s", d.Address)
 }
 
+func (d *RDataA) MarshalBinary() ([]byte, error) {
+	return d.Address.AsSlice(), nil
+}
+
+func (d *RDataA) ToBytes() []byte {
+	b, _ := d.MarshalBinary()
+	return b
+}
+
+var _ RData = &RDataNS{}
+
 type RDataNS struct {
 	NsdName string `json:"ns"`
 }
@@ -501,6 +783,17 @@ func (d *RDataNS) String() string {
 	return fmt.Sprintf("NS: %s", d.NsdName)
 }
 
+func (d *RDataNS) MarshalBinary() ([]byte, error) {
+	return encodeDomain(d.NsdName), nil
+}
+
+func (d *RDataNS) ToBytes() []byte {
+	b, _ := d.MarshalBinary()
+	return b
+}
+
+var _ RData = &RDataCNAME{}
+
 type RDataCNAME struct {
 	CName string `json:"cname"`
 }
@@ -508,6 +801,17 @@ type RDataCNAME struct {
 func (d *RDataCNAME) String() string {
 	return fmt.Sprintf("CNAME: %s", d.CName)
 }
+
+func (d *RDataCNAME) MarshalBinary() ([]byte, error) {
+	return encodeDomain(d.CName), nil
+}
+
+func (d *RDataCNAME) ToBytes() []byte {
+	b, _ := d.MarshalBinary()
+	return b
+}
+
+var _ RData = &RDataSOA{}
 
 type RDataSOA struct {
 	PrimaryNS            string `json:"primary-nameserver"`
@@ -536,6 +840,25 @@ func (d *RDataSOA) String() string {
 		d.MinimumTTL)
 }
 
+func (d *RDataSOA) MarshalBinary() ([]byte, error) {
+	b := new(bytes.Buffer)
+	b.Write(encodeDomain(d.PrimaryNS))
+	b.Write(encodeDomain(d.RespAuthorityMailbox))
+	binary.Write(b, binary.BigEndian, d.SerialNumber)
+	binary.Write(b, binary.BigEndian, d.RefreshInterval)
+	binary.Write(b, binary.BigEndian, d.RetryInterval)
+	binary.Write(b, binary.BigEndian, d.ExpireLimit)
+	binary.Write(b, binary.BigEndian, d.MinimumTTL)
+	return b.Bytes(), nil
+}
+
+func (d *RDataSOA) ToBytes() []byte {
+	b, _ := d.MarshalBinary()
+	return b
+}
+
+var _ RData = &RDataMX{}
+
 type RDataMX struct {
 	Preference uint16 `json:"preference"`
 	Exchange   string `json:"exchange"`
@@ -545,6 +868,20 @@ func (d *RDataMX) String() string {
 	return fmt.Sprintf("MX: %d %s", d.Preference, d.Exchange)
 }
 
+func (d *RDataMX) MarshalBinary() ([]byte, error) {
+	b := new(bytes.Buffer)
+	binary.Write(b, binary.BigEndian, d.Preference)
+	b.Write(encodeDomain(d.Exchange))
+	return b.Bytes(), nil
+}
+
+func (d *RDataMX) ToBytes() []byte {
+	b, _ := d.MarshalBinary()
+	return b
+}
+
+var _ RData = &RDataTXT{}
+
 type RDataTXT struct {
 	TxtData string `json:"txt-data"`
 }
@@ -553,6 +890,17 @@ func (d *RDataTXT) String() string {
 	return fmt.Sprintf("TXT: %s", d.TxtData)
 }
 
+func (d *RDataTXT) MarshalBinary() ([]byte, error) {
+	return []byte(d.TxtData), nil
+}
+
+func (d *RDataTXT) ToBytes() []byte {
+	b, _ := d.MarshalBinary()
+	return b
+}
+
+var _ RData = &RDataAAAA{}
+
 type RDataAAAA struct {
 	Address netip.Addr `json:"address"`
 }
@@ -560,6 +908,17 @@ type RDataAAAA struct {
 func (d *RDataAAAA) String() string {
 	return fmt.Sprintf("Address: %s", d.Address)
 }
+
+func (d *RDataAAAA) MarshalBinary() ([]byte, error) {
+	return d.Address.AsSlice(), nil
+}
+
+func (d *RDataAAAA) ToBytes() []byte {
+	b, _ := d.MarshalBinary()
+	return b
+}
+
+var _ RData = &RDataOPT{}
 
 type RDataOPT struct {
 	UDPPayloadSize     uint16 `json:"udp-payload-size"`
@@ -581,6 +940,21 @@ func (d *RDataOPT) String() string {
 		d.EDNSVer,
 		d.Z,
 		d.DataLen)
+}
+
+func (d *RDataOPT) MarshalBinary() ([]byte, error) {
+	b := make([]byte, 8)
+	binary.BigEndian.PutUint16(b[0:2], d.UDPPayloadSize)
+	b[2] = d.HigherBitsExtRCode
+	b[3] = d.EDNSVer
+	binary.BigEndian.PutUint16(b[4:6], d.Z)
+	binary.BigEndian.PutUint16(b[6:8], d.DataLen)
+	return b, nil
+}
+
+func (d *RDataOPT) ToBytes() []byte {
+	b, _ := d.MarshalBinary()
+	return b
 }
 
 type SvcParamKey struct {
@@ -657,6 +1031,21 @@ func (sp *SvcParam) String() string {
 	)
 }
 
+func (sp *SvcParam) MarshalBinary() ([]byte, error) {
+	b := make([]byte, 4)
+	binary.BigEndian.PutUint16(b[0:2], sp.Key.Val)
+	binary.BigEndian.PutUint16(b[2:4], sp.Length)
+	b = append(b, sp.Value...)
+	return b, nil
+}
+
+func (sp *SvcParam) ToBytes() []byte {
+	b, _ := sp.MarshalBinary()
+	return b
+}
+
+var _ RData = &RDataHTTPS{}
+
 type RDataHTTPS struct {
 	SvcPriority uint16      `json:"svc-priority"`
 	Length      int         `json:"length"`
@@ -686,12 +1075,45 @@ func (d *RDataHTTPS) String() string {
 	)
 }
 
+func (d *RDataHTTPS) MarshalBinary() ([]byte, error) {
+	b := new(bytes.Buffer)
+	binary.Write(b, binary.BigEndian, d.SvcPriority)
+	b.Write(encodeDomain(d.TargetName))
+	for _, p := range d.SvcParams {
+		if p == nil {
+			continue
+		}
+		pb, err := p.MarshalBinary()
+		if err != nil {
+			return nil, err
+		}
+		b.Write(pb)
+	}
+	return b.Bytes(), nil
+}
+
+func (d *RDataHTTPS) ToBytes() []byte {
+	b, _ := d.MarshalBinary()
+	return b
+}
+
+var _ RData = &RDataUnknown{}
+
 type RDataUnknown struct {
 	Data string `json:"data"`
 }
 
 func (d *RDataUnknown) String() string {
 	return d.Data
+}
+
+func (d *RDataUnknown) MarshalBinary() ([]byte, error) {
+	return []byte(d.Data), nil
+}
+
+func (d *RDataUnknown) ToBytes() []byte {
+	b, _ := d.MarshalBinary()
+	return b
 }
 
 // extractDomain extracts the DNS domain name from the given payload and tail.
@@ -749,8 +1171,8 @@ func parseQuery(payload, tail []byte) (*QueryEntry, []byte, error) {
 	tail = tail[4:]
 	return &QueryEntry{
 		Name:  domain,
-		Type:  newRecordType(typ),
-		Class: newRecordClass(cls),
+		Type:  NewRecordType(RecType(typ)),
+		Class: NewRecordClass(cls),
 	}, tail, nil
 }
 
@@ -767,8 +1189,8 @@ func parseQueries(payload, tail []byte, numRecords uint16) ([]*QueryEntry, []byt
 }
 
 // https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-4
-func parseRData(payload, tail []byte, typ uint16, rdl int) (fmt.Stringer, []byte, error) {
-	var rdata fmt.Stringer
+func parseRData(payload, tail []byte, typ uint16, rdl int) (RData, []byte, error) {
+	var rdata RData
 	if rdl > len(tail) {
 		return nil, nil, ErrSliceBounds
 	}
@@ -870,7 +1292,7 @@ func parseRData(payload, tail []byte, typ uint16, rdl int) (fmt.Stringer, []byte
 			target = "Root"
 			ttail = ttail[3:]
 		} else {
-			target, ttail, err = extractDomain(payload, ttail)
+			target, ttail, err = extractDomain(payload, ttail[2:])
 			if err != nil {
 				return nil, nil, err
 			}
@@ -914,7 +1336,7 @@ func parseResourceRecord(payload, tail []byte) (*ResourceRecord, []byte, error) 
 	cls := binary.BigEndian.Uint16(tail[2:4])
 	ttl := binary.BigEndian.Uint32(tail[4:8])
 	rdl := binary.BigEndian.Uint16(tail[8:offset])
-	var rdata fmt.Stringer
+	var rdata RData
 	if domain == "" && typ == 41 { // NOTE: ugly
 		offset = 2
 	}
@@ -926,12 +1348,12 @@ func parseResourceRecord(payload, tail []byte) (*ResourceRecord, []byte, error) 
 		domain = "Root"
 		ttl = 0
 	} else {
-		recordClass = newRecordClass(cls)
+		recordClass = NewRecordClass(cls)
 		rdlLength = rdl
 	}
 	return &ResourceRecord{
 		Name:     domain,
-		Type:     newRecordType(typ),
+		Type:     NewRecordType(RecType(typ)),
 		Class:    recordClass,
 		TTL:      ttl,
 		RDLength: rdlLength,
@@ -949,4 +1371,17 @@ func parseResourceRecords(payload, tail []byte, numRecords uint16) ([]*ResourceR
 		}
 	}
 	return records, tail, nil
+}
+
+func encodeDomain(name string) []byte {
+	if name == "Root" {
+		return []byte{0}
+	}
+	var out []byte
+	for l := range strings.SplitSeq(name, ".") {
+		out = append(out, byte(len(l)))
+		out = append(out, []byte(l)...)
+	}
+	out = append(out, 0)
+	return out
 }
