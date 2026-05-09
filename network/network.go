@@ -530,3 +530,20 @@ func PrettifyBytes(b int64) string {
 	}
 	return fmt.Sprintf("%.1fYB", bf)
 }
+
+// GetHostName performs the reverse DNS lookup for given address
+func GetHostName(ip netip.Addr) (string, error) {
+	if Is6(ip) {
+		ip = netip.AddrFrom16(ip.As16()) // strip zone
+	}
+	cmd := exec.Command("sh", "-c", fmt.Sprintf("dig -x %s +short +time=1 +tries=1", ip))
+	domainBytes, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to perform reverse lookup for %s: %v", ip, err)
+	}
+	domain := strings.TrimRight(string(domainBytes), "\r\n.")
+	if domain == "" {
+		return "", fmt.Errorf("failed to perform reverse lookup for %s", ip)
+	}
+	return domain, nil
+}
