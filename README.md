@@ -11,9 +11,15 @@
 
 ## Installation
 
-Download release from [Releases](https://github.com/shadowy-pycoder/mshark/releases) Page.
+- Arch Linux/CachyOS/EndeavourOS
 
-Or install using `go install` (requires Go 1.23+ but may work with older versions):
+```shell
+yay -S mshark
+```
+
+- Download release from [Releases](https://github.com/shadowy-pycoder/mshark/releases) Page.
+
+- Or install using `go install` (requires Go 1.26):
 
 ```shell
 CGO_ENABLED=0 go install -ldflags "-s -w" -trimpath github.com/shadowy-pycoder/mshark/cmd/mshark@latest
