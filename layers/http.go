@@ -75,7 +75,6 @@ func (h *HTTPMessage) Parse(data []byte) error {
 		h.Response = resp
 		h.Request = nil
 	} else {
-		reader := bufio.NewReader(bytes.NewReader(buf))
 		req, err := http.ReadRequest(reader)
 		if err != nil {
 			return err

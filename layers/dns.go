@@ -339,7 +339,8 @@ type DNSMessage struct {
 }
 
 func (d *DNSMessage) String() string {
-	return fmt.Sprintf(`%s
+	return fmt.Sprintf(
+		`%s
 - Transaction ID: %#04x
 - Flags: %#04x
 %s
@@ -1021,7 +1022,8 @@ func newSvcParam(data []byte) (*SvcParam, []byte, error) {
 }
 
 func (sp *SvcParam) String() string {
-	return fmt.Sprintf(`     - SvcParamKey: %s
+	return fmt.Sprintf(
+		`     - SvcParamKey: %s
      - SvcParamValue length: %d
      - SvcParamValue: %s
 `,
@@ -1065,7 +1067,8 @@ func (d *RDataHTTPS) printSvcParams() string {
 }
 
 func (d *RDataHTTPS) String() string {
-	return fmt.Sprintf(`SvcPriority: %d
+	return fmt.Sprintf(
+		`SvcPriority: %d
     - TargetName: %s
     - SvcParams:
 %s`,
@@ -1100,15 +1103,15 @@ func (d *RDataHTTPS) ToBytes() []byte {
 var _ RData = &RDataUnknown{}
 
 type RDataUnknown struct {
-	Data string `json:"data"`
+	Data []byte `json:"data"`
 }
 
 func (d *RDataUnknown) String() string {
-	return d.Data
+	return hex.EncodeToString(d.Data)
 }
 
 func (d *RDataUnknown) MarshalBinary() ([]byte, error) {
-	return []byte(d.Data), nil
+	return d.Data, nil
 }
 
 func (d *RDataUnknown) ToBytes() []byte {
@@ -1311,7 +1314,7 @@ func parseRData(payload, tail []byte, typ uint16, rdl int) (RData, []byte, error
 		}
 		rdata = &RDataHTTPS{SvcPriority: priority, Length: int(nameLength), TargetName: target, SvcParams: svcParams}
 	default:
-		rdata = &RDataUnknown{Data: string(tail[:rdl])}
+		rdata = &RDataUnknown{Data: tail[:rdl]}
 	}
 	if rdl > len(tail) {
 		return nil, nil, ErrSliceBounds

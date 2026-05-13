@@ -42,12 +42,18 @@ var (
 )
 
 type Writer struct {
-	w io.Writer
+	w      io.Writer
+	closer io.Closer
 }
 
 // NewWriter creates a new PCAPNG Writer that writes to the given io.Writer.
 func NewWriter(w io.Writer) *Writer {
-	return &Writer{w: w}
+	var c io.Closer
+
+	if closer, ok := w.(io.Closer); ok {
+		c = closer
+	}
+	return &Writer{w: w, closer: c}
 }
 
 // WriteHeader writes a Section Header Block (SHB) and an Interface Description Block (IDB)
@@ -261,4 +267,12 @@ func (pw *Writer) WritePacket(timestamp time.Time, data []byte) error {
 	pw.w.Write(bytes.Repeat(zero, padLen))
 	binary.Write(pw.w, nativeEndian, uint32(blockLen))
 	return nil
+}
+
+func (pw *Writer) Name() string {
+	return "pcapng"
+}
+
+func (pw *Writer) Close() error {
+	return pw.closer.Close()
 }

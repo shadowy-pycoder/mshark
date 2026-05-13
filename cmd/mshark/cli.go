@@ -6,8 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"slices"
-	"strings"
 	"time"
 
 	ms "github.com/shadowy-pycoder/mshark"
@@ -37,29 +35,10 @@ Options:
   -h    Show this help message and exit.
 `
 
-var supportedFormats = []string{"stdout", "txt", "pcap", "pcapng"}
-
 var (
 	_ ms.PacketWriter = &mpcap.Writer{}
 	_ ms.PacketWriter = &mpcapng.Writer{}
 )
-
-type ExtFlag []string
-
-func (f *ExtFlag) MarshalText() ([]byte, error) {
-	return nil, nil
-}
-
-func (f *ExtFlag) UnmarshalText(b []byte) error {
-	exts := *f
-	for ext := range strings.SplitSeq(string(b), ",") {
-		if !slices.Contains(exts, ext) && slices.Contains(supportedFormats, ext) {
-			exts = append(exts, ext)
-		}
-	}
-	*f = exts
-	return nil
-}
 
 func createFile(app, ext string) (*os.File, error) {
 	path := fmt.Sprintf("./%s_%s.%s", app, time.Now().UTC().Format("20060102_150405"), ext)
@@ -101,8 +80,7 @@ func root(args []string) error {
 		verbose = true
 		return nil
 	})
-	exts := ExtFlag([]string{})
-	flags.TextVar(&exts, "f", &exts, "File extension(s) to write captured data. Supported formats: stdout, txt, pcap, pcapng")
+	flags.TextVar(&conf.Exts, "f", &conf.Exts, "File extension(s) to write captured data. Supported formats: stdout, txt, pcap, pcapng")
 
 	flags.Usage = func() {
 		fmt.Print(usagePrefix)
@@ -138,12 +116,13 @@ func root(args []string) error {
 
 	// creating writers and writing headers depending on a file extension
 	var pw []ms.PacketWriter
-	if len(exts) != 0 {
-		for _, ext := range exts {
+	if len(conf.Exts) != 0 {
+		for _, ext := range conf.Exts {
 			switch ext {
 			case "stdout":
 				w := ms.NewWriter(os.Stdout, verbose)
 				if err := w.WriteHeader(&conf); err != nil {
+					w.Close()
 					return err
 				}
 				pw = append(pw, w)
@@ -152,9 +131,9 @@ func root(args []string) error {
 				if err != nil {
 					return err
 				}
-				defer f.Close()
 				w := ms.NewWriter(f, verbose)
 				if err := w.WriteHeader(&conf); err != nil {
+					w.Close()
 					return err
 				}
 				pw = append(pw, w)
@@ -163,9 +142,9 @@ func root(args []string) error {
 				if err != nil {
 					return err
 				}
-				defer f.Close()
 				w := mpcap.NewWriter(f)
 				if err := w.WriteHeader(conf.Snaplen); err != nil {
+					w.Close()
 					return err
 				}
 				pw = append(pw, w)
@@ -174,9 +153,9 @@ func root(args []string) error {
 				if err != nil {
 					return err
 				}
-				defer f.Close()
 				w := mpcapng.NewWriter(f)
 				if err := w.WriteHeader(app, conf.Device, conf.Expr, conf.Snaplen); err != nil {
+					w.Close()
 					return err
 				}
 				pw = append(pw, w)
@@ -188,6 +167,7 @@ func root(args []string) error {
 	} else {
 		w := ms.NewWriter(os.Stdout, verbose)
 		if err := w.WriteHeader(&conf); err != nil {
+			w.Close()
 			return err
 		}
 		pw = append(pw, w)

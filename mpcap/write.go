@@ -22,13 +22,19 @@ const (
 var nativeEndian = native.Endian
 
 type Writer struct {
-	w   io.Writer
-	buf [16]byte
+	w      io.Writer
+	buf    [16]byte
+	closer io.Closer
 }
 
 // NewWriter creates a new PCAP Writer that writes to the given io.Writer.
 func NewWriter(w io.Writer) *Writer {
-	return &Writer{w: w}
+	var c io.Closer
+
+	if closer, ok := w.(io.Closer); ok {
+		c = closer
+	}
+	return &Writer{w: w, closer: c}
 }
 
 // WriteHeader writes a global header block to the pcap file.
@@ -77,4 +83,12 @@ func (pw *Writer) WritePacket(timestamp time.Time, data []byte) error {
 	}
 	_, err := pw.w.Write(data)
 	return err
+}
+
+func (pw *Writer) Name() string {
+	return "pcap"
+}
+
+func (pw *Writer) Close() error {
+	return pw.closer.Close()
 }

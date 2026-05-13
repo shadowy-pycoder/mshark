@@ -8,6 +8,8 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,12 +24,22 @@ var colorMap = map[int]string{ // TODO (shadowy-pycoder): add colors from shadow
 	3: "\033[33m",
 	4: "\033[35m",
 }
-var packetDelimeter = "\033[37m" + strings.Repeat("─", 66) + "\033[0m"
+
+var (
+	packetDelimeter      = strings.Repeat("─", 66)
+	packetDelimeterColor = "\033[37m" + packetDelimeter + "\033[0m"
+	SupportedFormats     = []string{"stdout", "txt", "pcap", "pcapng"}
+	errParseConfig       = fmt.Errorf(
+		`failed parsing config. Example: "interface eth0;snaplen 65535;promisc true;timeout 10s;packet_count 100;packet_buffer 8192;expr ip proto tcp;exts stdout,txt,pcap,pcapng"`,
+	)
+)
 
 var _ PacketWriter = &Writer{}
 
 type PacketWriter interface {
 	WritePacket(timestamp time.Time, data []byte) error
+	io.Closer
+	Name() string
 }
 
 type Config struct {
@@ -38,6 +50,116 @@ type Config struct {
 	PacketCount  int            // The maximum number of packets to capture.
 	PacketBuffer int            // The maximum size for packet buffer (Default: 8192)
 	Expr         string         // BPF filter expression.
+	Exts         ExtNames       // file formats to put packet capture
+}
+
+// NewConfig creates Config from a list of options separated by semicolon.
+//
+// Example: "interface eth0;snaplen 65535;promisc true;timeout 10s;packet_count 100;packet_buffer 8192;expr ip proto tcp;exts stdout,txt,pcap,pcapng".
+// All fields in configuration string are optional.
+func NewConfig(s string) (*Config, error) {
+	c := &Config{}
+	var promiscSet bool
+	for opt := range strings.SplitSeq(strings.ToLower(s), ";") {
+		keyval := strings.SplitN(strings.Trim(opt, " "), " ", 2)
+		if len(keyval) < 2 {
+			return nil, errParseConfig
+		}
+		key := keyval[0]
+		val := keyval[1]
+		switch key {
+		case "interface":
+			in, err := network.InterfaceByName(val)
+			if err != nil {
+				return nil, err
+			}
+			c.Device = in
+		case "snaplen":
+			sl, err := strconv.ParseUint(val, 10, 16)
+			if err != nil {
+				return nil, err
+			}
+			c.Snaplen = int(sl)
+		case "promisc":
+			switch val {
+			case "true", "1":
+				c.Promisc = true
+			case "false", "0":
+				c.Promisc = false
+			default:
+				return nil, fmt.Errorf("unknown value %q for %q", val, key)
+			}
+			promiscSet = true
+		case "timeout":
+			t, err := time.ParseDuration(val)
+			if err != nil {
+				return nil, err
+			}
+			c.Timeout = t
+		case "packet_count":
+			pc, err := strconv.Atoi(val)
+			if err != nil {
+				return nil, err
+			}
+			c.PacketCount = pc
+		case "packet_buffer":
+			pb, err := strconv.Atoi(val)
+			if err != nil {
+				return nil, err
+			}
+			c.PacketBuffer = pb
+		case "expr":
+			c.Expr = val
+		case "exts":
+			exts, err := NewExtNames(val)
+			if err != nil {
+				return nil, err
+			}
+			c.Exts = *exts
+		default:
+			return nil, errParseConfig
+		}
+	}
+	if !c.Promisc && !promiscSet {
+		c.Promisc = true
+	}
+	if c.Snaplen <= 0 {
+		c.Snaplen = 65535
+	}
+	if c.PacketBuffer <= 0 {
+		c.PacketBuffer = 8192
+	}
+	return c, nil
+}
+
+type ExtNames []string
+
+func NewExtNames(exts string) (*ExtNames, error) {
+	en := make(ExtNames, 0, 4)
+	for ext := range strings.SplitSeq(exts, ",") {
+		if !slices.Contains(SupportedFormats, ext) {
+			return nil, fmt.Errorf("unsupported file format: %s", ext)
+		}
+		if !slices.Contains(en, ext) {
+			en = append(en, ext)
+		}
+	}
+	return &en, nil
+}
+
+func (en *ExtNames) MarshalText() ([]byte, error) {
+	return nil, nil
+}
+
+func (en *ExtNames) UnmarshalText(b []byte) error {
+	exts := *en
+	for ext := range strings.SplitSeq(string(b), ",") {
+		if !slices.Contains(exts, ext) && slices.Contains(SupportedFormats, ext) {
+			exts = append(exts, ext)
+		}
+	}
+	*en = exts
+	return nil
 }
 
 type Writer struct {
@@ -45,14 +167,23 @@ type Writer struct {
 	packets uint64
 	stdout  bool
 	verbose bool
+	closer  io.Closer
 }
 
 // NewWriter creates a new mshark Writer.
 func NewWriter(w io.Writer, verbose bool) *Writer {
+	var c io.Closer
+
+	if w != os.Stdout {
+		if closer, ok := w.(io.Closer); ok {
+			c = closer
+		}
+	}
 	return &Writer{
 		w:       w,
 		stdout:  w == os.Stdout,
 		verbose: verbose,
+		closer:  c,
 	}
 }
 
@@ -79,7 +210,11 @@ func (mw *Writer) printPacket(layer layers.Layer, layerNum int) {
 func (mw *Writer) WritePacket(timestamp time.Time, data []byte) error {
 	mw.packets++
 	fmt.Fprintf(mw.w, "- Packet: %d Timestamp: %s\n", mw.packets, timestamp.Format("2006-01-02T15:04:05.000000-0700"))
-	fmt.Fprintln(mw.w, packetDelimeter)
+	if mw.stdout {
+		fmt.Fprintln(mw.w, packetDelimeterColor)
+	} else {
+		fmt.Fprintln(mw.w, packetDelimeter)
+	}
 	next := layers.GetLayer(layers.LayerETH)
 	if next == nil {
 		return nil
@@ -115,7 +250,8 @@ func (mw *Writer) WritePacket(timestamp time.Time, data []byte) error {
 //   - BPF Filter: "ip proto tcp"
 //   - Verbose: true
 func (mw *Writer) WriteHeader(c *Config) error {
-	_, err := fmt.Fprintf(mw.w, `- Interface: %s
+	_, err := fmt.Fprintf(
+		mw.w, `- Interface: %s
 - Snapshot Length: %d
 - Promiscuous Mode: %v
 - Timeout: %s
@@ -137,6 +273,20 @@ func (mw *Writer) WriteHeader(c *Config) error {
 	return err
 }
 
+func (mw *Writer) Name() string {
+	if mw.stdout {
+		return "stdout"
+	}
+	return "txt"
+}
+
+func (mw *Writer) Close() error {
+	if mw.closer != nil {
+		return mw.closer.Close()
+	}
+	return nil
+}
+
 // OpenLive opens a live capture based on the given configuration and writes
 // all captured packets to the given PacketWriters.
 func OpenLive(conf *Config, pw ...PacketWriter) error {
@@ -156,14 +306,16 @@ func OpenLive(conf *Config, pw ...PacketWriter) error {
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to fetch stats: %v", err)
 		} else {
-			fmt.Printf("- Packets: %d, Drops: %d, Freeze Queue Count: %d\n",
-				stats.Packets, stats.Drops, stats.FreezeQueueCount)
 			for _, w := range pw {
-				if w, ok := w.(*Writer); ok && w.w == os.Stdout {
+				if w, ok := w.(*Writer); ok && (w.Name() == "stdout" || w.Name() == "txt") {
+					fmt.Fprintf(w.w, "- Packets: %d, Drops: %d, Freeze Queue Count: %d\n",
+						stats.Packets, stats.Drops, stats.FreezeQueueCount)
 					fmt.Fprintf(w.w, "- Packets Captured: %d\n", w.packets)
-					break
 				}
 			}
+		}
+		for _, w := range pw {
+			w.Close()
 		}
 		// close Conn
 		err = c.Close()
@@ -185,9 +337,6 @@ func OpenLive(conf *Config, pw ...PacketWriter) error {
 	infinity := count == 0
 
 	b := make([]byte, conf.Snaplen)
-	if conf.PacketBuffer <= 0 {
-		conf.PacketBuffer = 8192
-	}
 	packetQueue := make(chan []byte, conf.PacketBuffer)
 
 	go func() {
