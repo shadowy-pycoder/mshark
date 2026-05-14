@@ -553,3 +553,19 @@ func StripZone(ip netip.Addr) netip.Addr {
 	}
 	return netip.AddrFrom16(ip.As16())
 }
+
+// GetIPv6Resolver returns first suitable IPv6 address from resolv.conf or Google IPv6 DNS as fallback
+func GetIPv6Resolver(dev *net.Interface) *net.UDPAddr {
+	if resolvers, err := GetSystemNameservers(); err == nil {
+		for _, r := range resolvers {
+			if Is6(r) {
+				var zone string
+				if r.IsLinkLocalUnicast() && dev != nil {
+					zone = dev.Name
+				}
+				return &net.UDPAddr{IP: net.ParseIP(StripZone(r).String()), Port: 53, Zone: zone}
+			}
+		}
+	}
+	return &net.UDPAddr{IP: net.ParseIP("2001:4860:4860::8888"), Port: 53}
+}
