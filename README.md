@@ -8,30 +8,37 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/shadowy-pycoder/mshark)](https://goreportcard.com/report/github.com/shadowy-pycoder/mshark)
 ![GitHub Release](https://img.shields.io/github/v/release/shadowy-pycoder/mshark)
 ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/shadowy-pycoder/mshark/total)
+![GitHub Downloads (all assets, latest release)](https://img.shields.io/github/downloads/shadowy-pycoder/mshark/latest/total)
 
 ## Installation
 
 - Arch Linux/CachyOS/EndeavourOS
 
-```shell
-yay -S mshark
-```
+  ```shell
+  yay -S mshark
+  ```
+
+  Or using `paru`:
+
+  ```shell
+  paru -S mshark
+  ```
 
 - Download release from [Releases](https://github.com/shadowy-pycoder/mshark/releases) Page.
 
-- Or install using `go install` (requires Go 1.26):
+- Or install using `go install` (requires Go 1.26+):
 
-```shell
-CGO_ENABLED=0 go install -ldflags "-s -w" -trimpath github.com/shadowy-pycoder/mshark/cmd/mshark@latest
-```
+  ```shell
+  CGO_ENABLED=0 go install -ldflags "-s -w" -trimpath github.com/shadowy-pycoder/mshark/cmd/mshark@latest
+  ```
 
-This will install the `mshark` binary to your `$GOPATH/bin` directory.
+  This will install the `mshark` binary to your `$GOPATH/bin` directory.
 
-If you are getting a `Permission denied` error when running `mshark`, try running
+  If you are getting a `Permission denied` error when running `mshark`, try running
 
-```shell
-sudo setcap cap_net_raw+ep ~/go/bin/mshark
-```
+  ```shell
+  sudo setcap cap_net_raw+ep ~/go/bin/mshark
+  ```
 
 ## Usage
 
@@ -50,6 +57,7 @@ mshark -h
 Packet Capture Tool by shadowy-pycoder
 
 GitHub: https://github.com/shadowy-pycoder/mshark
+Codeberg: https://codeberg.org/shadowy-pycoder/mshark
 
 Usage: mshark [OPTIONS]
 Options:

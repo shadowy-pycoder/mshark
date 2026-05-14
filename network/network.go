@@ -533,9 +533,7 @@ func PrettifyBytes(b int64) string {
 
 // GetHostName performs the reverse DNS lookup for given address
 func GetHostName(ip netip.Addr) (string, error) {
-	if Is6(ip) {
-		ip = netip.AddrFrom16(ip.As16()) // strip zone
-	}
+	ip = StripZone(ip)
 	cmd := exec.Command("sh", "-c", fmt.Sprintf("dig -x %s +short +time=1 +tries=1", ip))
 	domainBytes, err := cmd.Output()
 	if err != nil {
@@ -546,4 +544,12 @@ func GetHostName(ip netip.Addr) (string, error) {
 		return "", fmt.Errorf("failed to perform reverse lookup for %s", ip)
 	}
 	return domain, nil
+}
+
+// StripZone removes zone from IPv6 address
+func StripZone(ip netip.Addr) netip.Addr {
+	if !Is6(ip) {
+		return ip
+	}
+	return netip.AddrFrom16(ip.As16())
 }

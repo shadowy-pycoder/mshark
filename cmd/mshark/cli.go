@@ -29,6 +29,7 @@ const usagePrefix string = `                ______   __                         
 Packet Capture Tool by shadowy-pycoder
 
 GitHub: https://github.com/shadowy-pycoder/mshark
+Codeberg: https://codeberg.org/shadowy-pycoder/mshark
 
 Usage: mshark [OPTIONS]
 Options:
