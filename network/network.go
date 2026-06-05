@@ -134,7 +134,7 @@ func GetDefaultInterface() (*net.Interface, error) {
 		line := scanner.Text()
 		fields := strings.Fields(line)
 		if len(fields) >= 2 && fields[1] == "00000000" {
-			if strings.Contains(fields[0], "tun") {
+			if strings.Contains(fields[0], "tun") || strings.Contains(fields[0], "lo") {
 				continue
 			}
 			defaultInterface = fields[0]
@@ -152,7 +152,7 @@ func GetDefaultInterfaceFromRoute() (*net.Interface, error) {
 	}
 	routeFields := strings.Fields(string(routeRaw))
 	for i, f := range routeFields {
-		if f == "dev" && i+1 < len(routeFields) && routeFields[i+1] != "tun" {
+		if f == "dev" && i+1 < len(routeFields) && routeFields[i+1] != "tun" && routeFields[i+1] != "lo" {
 			return net.InterfaceByName(routeFields[i+1])
 		}
 	}
@@ -167,7 +167,7 @@ func GetDefaultInterfaceFromRouteIPv6() (*net.Interface, error) {
 	}
 	routeFields := strings.Fields(string(routeRaw))
 	for i, f := range routeFields {
-		if f == "dev" && i+1 < len(routeFields) && routeFields[i+1] != "tun" {
+		if f == "dev" && i+1 < len(routeFields) && routeFields[i+1] != "tun" && routeFields[i+1] != "lo" {
 			return net.InterfaceByName(routeFields[i+1])
 		}
 	}
@@ -209,7 +209,7 @@ func GetDefaultGatewayIPv4() (netip.Addr, error) {
 		}
 		ipstr := ipdev[0]
 		dev := ipdev[1]
-		if strings.Contains(dev, "tun") {
+		if strings.Contains(dev, "tun") || strings.Contains(dev, "lo") {
 			continue
 		}
 		ip, err := netip.ParseAddr(ipstr)
@@ -237,7 +237,7 @@ func GetDefaultGatewayIPv6() (netip.Addr, error) {
 		}
 		ipstr := ipdev[0]
 		dev := ipdev[1]
-		if strings.Contains(dev, "tun") {
+		if strings.Contains(dev, "tun") || strings.Contains(dev, "lo") {
 			continue
 		}
 		ip, err := netip.ParseAddr(ipstr)
