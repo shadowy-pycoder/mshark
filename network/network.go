@@ -3,6 +3,7 @@ package network
 
 import (
 	"bufio"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
@@ -568,4 +569,19 @@ func GetIPv6Resolver(dev *net.Interface) *net.UDPAddr {
 		}
 	}
 	return &net.UDPAddr{IP: net.ParseIP("2001:4860:4860::8888"), Port: 53}
+}
+
+// BroadcastFromPrefix calculates broadcast address from IPv4 prefix.Addr
+func BroadcastFromPrefix(prefix netip.Prefix) (netip.Addr, error) {
+	if !prefix.IsValid() || prefix.Addr().Is6() {
+		return netip.Addr{}, fmt.Errorf("only IPv4 addresses are supported")
+	}
+	prefixAddr := netip.AddrFrom4(prefix.Addr().As4()).AsSlice()
+	netID := make([]byte, 4)
+	binary.BigEndian.PutUint32(netID, binary.BigEndian.Uint32(prefixAddr)|uint32(0xffffffff>>prefix.Bits()))
+	addr, ok := netip.AddrFromSlice(netID)
+	if !ok {
+		return netip.Addr{}, fmt.Errorf("failed parsing broadcast address")
+	}
+	return addr, nil
 }
