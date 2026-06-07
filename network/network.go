@@ -576,9 +576,13 @@ func BroadcastFromPrefix(prefix netip.Prefix) (netip.Addr, error) {
 	if !prefix.IsValid() || prefix.Addr().Is6() {
 		return netip.Addr{}, fmt.Errorf("only IPv4 addresses are supported")
 	}
+	prefixBits := prefix.Bits()
+	if prefixBits == 31 /* RFC 3021 */ || prefixBits == 32 /* single IP */ {
+		return netip.Addr{}, fmt.Errorf("no broadcast address exist for this prefix length")
+	}
 	prefixAddr := netip.AddrFrom4(prefix.Addr().As4()).AsSlice()
 	netID := make([]byte, 4)
-	binary.BigEndian.PutUint32(netID, binary.BigEndian.Uint32(prefixAddr)|uint32(0xffffffff>>prefix.Bits()))
+	binary.BigEndian.PutUint32(netID, binary.BigEndian.Uint32(prefixAddr)|uint32(0xffffffff>>prefixBits))
 	addr, ok := netip.AddrFromSlice(netID)
 	if !ok {
 		return netip.Addr{}, fmt.Errorf("failed parsing broadcast address")
