@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mdlayher/packet"
 	"github.com/shadowy-pycoder/mshark/layers"
 	"github.com/shadowy-pycoder/mshark/network"
 )
@@ -290,17 +291,21 @@ func (mw *Writer) Close() error {
 // OpenLive opens a live capture based on the given configuration and writes
 // all captured packets to the given PacketWriters.
 func OpenLive(conf *Config, pw ...PacketWriter) error {
-	lc := &network.ListenConfig{Device: conf.Device, FilterExpr: conf.Expr}
-	// setting promisc mode
-	if conf.Device.Name != "any" {
-		lc.Promiscuous = &conf.Promisc
-	}
+	lc := &network.ListenConfig{Device: conf.Device, Promiscuous: &conf.Promisc, FilterExpr: conf.Expr}
 	c, err := network.ListenPacket(lc)
 	if err != nil {
 		return err
 	}
+	return OpenLiveFromPacketConn(c, conf, pw...)
+}
+
+func OpenLiveFromPacketConn(conn net.PacketConn, conf *Config, pw ...PacketWriter) error {
 	done := make(chan bool)
 
+	c, ok := conn.(*packet.Conn)
+	if !ok {
+		return fmt.Errorf("failed creating packet connection")
+	}
 	defer func() {
 		stats, err := c.Stats()
 		if err != nil {

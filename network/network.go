@@ -71,7 +71,7 @@ func ListenPacket(conf *ListenConfig) (*packet.Conn, error) {
 		return nil, fmt.Errorf("failed to listen: %v", err)
 	}
 	// setting promisc mode
-	if conf.Promiscuous != nil {
+	if conf.Promiscuous != nil && conf.Device.Name != "any" {
 		if err := c.SetPromiscuous(*conf.Promiscuous); err != nil {
 			return nil, fmt.Errorf("unable to set promiscuous mode: %v", err)
 		}
@@ -158,6 +158,52 @@ func GetDefaultInterfaceFromRoute() (*net.Interface, error) {
 		}
 	}
 	return nil, fmt.Errorf("failed getting default interface from route")
+}
+
+func GetFirstAvailableInterfaceFromRoute() (*net.Interface, error) {
+	cmd := exec.Command("sh", "-c", `ip -4 route show | tr -d '\n'`)
+	routeRaw, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	routeFields := strings.Fields(string(routeRaw))
+	for i, f := range routeFields {
+		if f == "dev" && i+1 < len(routeFields) && routeFields[i+1] != "tun" && routeFields[i+1] != "lo" {
+			iface, err := net.InterfaceByName(routeFields[i+1])
+			if err != nil {
+				continue
+			}
+			ok := len(iface.HardwareAddr) == 6 && iface.Flags&(net.FlagUp|net.FlagMulticast|net.FlagBroadcast) != 0
+			if !ok {
+				continue
+			}
+			return iface, nil
+		}
+	}
+	return nil, fmt.Errorf("failed getting first available interface from route")
+}
+
+func GetFirstAvailableInterfaceFromRouteIPv6() (*net.Interface, error) {
+	cmd := exec.Command("sh", "-c", `ip -6 route show | tr -d '\n'`)
+	routeRaw, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	routeFields := strings.Fields(string(routeRaw))
+	for i, f := range routeFields {
+		if f == "dev" && i+1 < len(routeFields) && routeFields[i+1] != "tun" && routeFields[i+1] != "lo" {
+			iface, err := net.InterfaceByName(routeFields[i+1])
+			if err != nil {
+				continue
+			}
+			ok := len(iface.HardwareAddr) == 6 && iface.Flags&(net.FlagUp|net.FlagMulticast|net.FlagBroadcast) != 0
+			if !ok {
+				continue
+			}
+			return iface, nil
+		}
+	}
+	return nil, fmt.Errorf("failed getting first available interface from route")
 }
 
 func GetDefaultInterfaceFromRouteIPv6() (*net.Interface, error) {
@@ -532,6 +578,12 @@ func PrettifyBytes(b int64) string {
 	return fmt.Sprintf("%.1fYB", bf)
 }
 
+var replacer = strings.NewReplacer(
+	"\r\n", "",
+	"\r", "",
+	"\n", "",
+)
+
 // GetHostName performs the reverse DNS lookup for given address
 func GetHostName(ip netip.Addr) (string, error) {
 	ip = StripZone(ip)
@@ -540,7 +592,8 @@ func GetHostName(ip netip.Addr) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to perform reverse lookup for %s: %v", ip, err)
 	}
-	domain := strings.TrimRight(string(domainBytes), "\r\n.")
+	domain := strings.TrimRight(replacer.Replace(string(domainBytes)), ".")
+
 	if domain == "" {
 		return "", fmt.Errorf("failed to perform reverse lookup for %s", ip)
 	}

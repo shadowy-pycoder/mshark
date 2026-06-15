@@ -6,9 +6,68 @@ import (
 	"net/netip"
 )
 
-const headerSizeICMP = 4
+const (
+	headerSizeICMP           = 4
+	headerChecksumOffsetICMP = 42
+)
 
-// ICMP is part of the Internet protocol suite as defined in RFC 792.
+type ICMPMessageType uint8
+
+const (
+	ICMPTypeEchoReply   ICMPMessageType = 0
+	ICMPTypeEchoRequest ICMPMessageType = 8
+)
+
+type ICMPMessage interface {
+	Type() ICMPMessageType
+	MarshalBinary() ([]byte, error)
+	ToBytes() []byte
+	SetChecksum(pseudo []byte) error
+}
+
+var _ ICMPMessage = &ICMPEchoRequest{}
+
+type ICMPEchoRequest struct {
+	Checksum       uint16
+	Identifier     uint16
+	SequenceNumber uint16
+	Data           []byte
+}
+
+func (ereq *ICMPEchoRequest) Type() ICMPMessageType {
+	return ICMPTypeEchoRequest
+}
+
+func (ereq *ICMPEchoRequest) MarshalBinary() ([]byte, error) {
+	b := make([]byte, 1+1+2+2+2+len(ereq.Data))
+	b[0] = uint8(ereq.Type())
+	// b[1] = 0
+	binary.BigEndian.PutUint16(b[2:4], ereq.Checksum)
+	binary.BigEndian.PutUint16(b[4:6], ereq.Identifier)
+	binary.BigEndian.PutUint16(b[6:8], ereq.SequenceNumber)
+	copy(b[8:], ereq.Data)
+	return b, nil
+}
+
+func (ereq *ICMPEchoRequest) ToBytes() []byte {
+	b, _ := ereq.MarshalBinary()
+	return b
+}
+
+func (ereq *ICMPEchoRequest) SetChecksum(pseudo []byte) error {
+	ereqb, err := ereq.MarshalBinary()
+	if err != nil {
+		return err
+	}
+	checksum, err := CalculateInternetChecksum(append(pseudo, ereqb...), headerChecksumOffsetICMP)
+	if err != nil {
+		return err
+	}
+	ereq.Checksum = checksum
+	return nil
+}
+
+// ICMPSegment is part of the Internet protocol suite as defined in RFC 792.
 type ICMPSegment struct {
 	Type     uint8  // ICMP type.
 	TypeDesc string // ICMP type description.
@@ -41,8 +100,21 @@ func (i *ICMPSegment) Summary() string {
 	return fmt.Sprintf("ICMP Segment: %s (%s)", i.TypeDesc, i.CodeDesc)
 }
 
-// Parse parses the given byte data into an ICMP segment struct.
-func (i *ICMPSegment) Parse(data []byte) error {
+func (i *ICMPSegment) MarshalBinary() ([]byte, error) {
+	b := make([]byte, 1+1+2+len(i.Data))
+	b[0] = i.Type
+	b[1] = i.Code
+	binary.BigEndian.PutUint16(b[2:4], i.Checksum)
+	copy(b[headerSizeICMPv6:], i.Data)
+	return b, nil
+}
+
+func (i *ICMPSegment) ToBytes() []byte {
+	b, _ := i.MarshalBinary()
+	return b
+}
+
+func (i *ICMPSegment) UnmarshalBinary(data []byte) error {
 	if len(data) < headerSizeICMP {
 		return fmt.Errorf("minimum header size for ICMP is %d bytes, got %d bytes", headerSizeICMP, len(data))
 	}
@@ -69,6 +141,11 @@ func (i *ICMPSegment) Parse(data []byte) error {
 		return fmt.Errorf("failed determining type or code")
 	}
 	return nil
+}
+
+// Parse parses the given byte data into an ICMP segment struct.
+func (i *ICMPSegment) Parse(data []byte) error {
+	return i.UnmarshalBinary(data)
 }
 
 func (i *ICMPSegment) NextLayer() Layer { return nil }
