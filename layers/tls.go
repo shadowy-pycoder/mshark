@@ -180,7 +180,8 @@ func (tch *TLSClientHello) MarshalJSON() ([]byte, error) {
 }
 
 func (tch *TLSClientHello) String() string {
-	return fmt.Sprintf(` - Type: %s (%d)
+	return fmt.Sprintf(
+		` - Type: %s (%d)
  - Length: %d
  - Version: %s
  - Random: %s
@@ -301,7 +302,7 @@ func (tch *TLSClientHello) ParseHS(data []byte) error {
 			start := i + 6
 			alpns := make([]string, 0, 5)
 			for start < i+length+4 {
-				if len(data) < int(start) {
+				if len(data) <= int(start) {
 					return nil
 				}
 				alpnStringLength := data[start]
@@ -375,7 +376,8 @@ func (tsh *TLSServerHello) MarshalJSON() ([]byte, error) {
 }
 
 func (tsh *TLSServerHello) String() string {
-	return fmt.Sprintf(` - Type: %s (%d)
+	return fmt.Sprintf(
+		` - Type: %s (%d)
  - Length: %d
  - Version: %s
  - Random: %s
