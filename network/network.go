@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -27,6 +28,12 @@ var (
 	IPv6MulticastMAC        = net.HardwareAddr{0x33, 0x33, 0x00, 0x00, 0x00, 0x01}
 	IPv6MulticastAllNodes   = netip.MustParseAddr("ff02::1")
 	IPv6MulticastAllRouters = netip.MustParseAddr("ff02::2")
+	GoogleDNS               = &net.UDPAddr{IP: net.ParseIP("8.8.8.8"), Port: 53}
+	GoogleDNS6              = &net.UDPAddr{IP: net.ParseIP("2001:4860:4860::8888"), Port: 53}
+	CloudflareDNS           = &net.UDPAddr{IP: net.ParseIP("1.1.1.1"), Port: 53}
+	CloudflareDNS6          = &net.UDPAddr{IP: net.ParseIP("2606:4700:4700::1111"), Port: 53}
+	AdguardDNS              = &net.UDPAddr{IP: net.ParseIP("94.140.14.14"), Port: 53}
+	AdguardDNS6             = &net.UDPAddr{IP: net.ParseIP("2a10:50c0::ad1:ff"), Port: 53}
 )
 
 type ListenConfig struct {
@@ -146,7 +153,7 @@ func GetDefaultInterface() (*net.Interface, error) {
 }
 
 func GetDefaultInterfaceFromRoute() (*net.Interface, error) {
-	cmd := exec.Command("sh", "-c", `ip -4 route get 8.8.8.8 | tr -d '\n'`)
+	cmd := exec.Command("sh", "-c", fmt.Sprintf(`ip -4 route get %s | tr -d '\n'`, GoogleDNS.IP))
 	routeRaw, err := cmd.Output()
 	if err != nil {
 		return nil, err
@@ -207,7 +214,7 @@ func GetFirstAvailableInterfaceFromRouteIPv6() (*net.Interface, error) {
 }
 
 func GetDefaultInterfaceFromRouteIPv6() (*net.Interface, error) {
-	cmd := exec.Command("sh", "-c", `ip -6 route get 2001:4860:4860::8888  | tr -d '\n'`)
+	cmd := exec.Command("sh", "-c", fmt.Sprintf(`ip -6 route get %s | tr -d '\n'`, GoogleDNS6.IP))
 	routeRaw, err := cmd.Output()
 	if err != nil {
 		return nil, err
@@ -222,7 +229,7 @@ func GetDefaultInterfaceFromRouteIPv6() (*net.Interface, error) {
 }
 
 func GetHostIPv6GlobalUnicastFromRoute() (netip.Addr, error) {
-	cmd := exec.Command("sh", "-c", `ip -6 route get 2001:4860:4860::8888  | tr -d '\n'`)
+	cmd := exec.Command("sh", "-c", fmt.Sprintf(`ip -6 route get %s | tr -d '\n'`, GoogleDNS6.IP))
 	routeRaw, err := cmd.Output()
 	if err != nil {
 		return netip.Addr{}, err
@@ -300,7 +307,7 @@ func GetDefaultGatewayIPv6() (netip.Addr, error) {
 }
 
 func GetDefaultGatewayIPv4FromRoute() (netip.Addr, error) {
-	cmd := exec.Command("sh", "-c", `ip -4 route get 8.8.8.8 | awk '{print $3}' | tr -d '\n'`)
+	cmd := exec.Command("sh", "-c", fmt.Sprintf(`ip -4 route get %s | awk '{print $3}' | tr -d '\n'`, GoogleDNS.IP))
 	ipstrRaw, err := cmd.Output()
 	if err != nil {
 		return netip.Addr{}, err
@@ -316,7 +323,7 @@ func GetDefaultGatewayIPv4FromRoute() (netip.Addr, error) {
 }
 
 func GetDefaultGatewayIPv6FromRoute() (netip.Addr, error) {
-	cmd := exec.Command("sh", "-c", `ip -6 route get 2001:4860:4860::8888 | awk '{print $5}' | tr -d '\n'`)
+	cmd := exec.Command("sh", "-c", fmt.Sprintf(`ip -6 route get %s | awk '{print $5}' | tr -d '\n'`, GoogleDNS6.IP))
 	ipstrRaw, err := cmd.Output()
 	if err != nil {
 		return netip.Addr{}, err
@@ -509,18 +516,9 @@ func PrefixIsValid(prefix netip.Addr, length int) bool {
 	return true
 }
 
-func GetSystemNameservers() ([]netip.Addr, error) {
-	var fBytes []byte
-	var err error
-	fBytes, err = os.ReadFile("/run/systemd/resolve/resolv.conf")
-	if err != nil {
-		fBytes, err = os.ReadFile("/etc/resolv.conf")
-		if err != nil {
-			return nil, err
-		}
-	}
+func parseResolveConfig(data []byte) ([]netip.Addr, error) {
 	ns := make([]netip.Addr, 0, 3)
-	for line := range strings.Lines(string(fBytes)) {
+	for line := range strings.Lines(string(data)) {
 		if strings.HasPrefix(line, "#") {
 			continue
 		}
@@ -543,9 +541,89 @@ func GetSystemNameservers() ([]netip.Addr, error) {
 	return ns, nil
 }
 
+func GetSystemNameservers() ([]netip.Addr, error) {
+	var fBytes []byte
+	var err error
+	fBytes, err = os.ReadFile("/run/systemd/resolve/resolv.conf")
+	if err != nil {
+		fBytes, err = os.ReadFile("/etc/resolv.conf")
+		if err != nil {
+			return nil, err
+		}
+	}
+	return parseResolveConfig(fBytes)
+}
+
+func GetNameserversForNetworkNamespace(ns string) ([]netip.Addr, error) {
+	if ns == "" {
+		return GetSystemNameservers()
+	}
+	fBytes, err := os.ReadFile(filepath.Clean(fmt.Sprintf("/etc/netns/%s/resolv.conf", filepath.Base(ns))))
+	if err != nil {
+		return nil, err
+	}
+	return parseResolveConfig(fBytes)
+}
+
+// GetIPv4Resolver returns first suitable IPv4 address from resolv.conf or Google IPv4 DNS as fallback
+func GetIPv4Resolver(dev *net.Interface) *net.UDPAddr {
+	if resolvers, err := GetSystemNameservers(); err == nil {
+		for _, r := range resolvers {
+			if r.Is4() {
+				return &net.UDPAddr{IP: net.ParseIP(r.String()), Port: 53}
+			}
+		}
+	}
+	return GoogleDNS
+}
+
+// GetIPv6Resolver returns first suitable IPv6 address from resolv.conf or Google IPv6 DNS as fallback
+func GetIPv6Resolver(dev *net.Interface) *net.UDPAddr {
+	if resolvers, err := GetSystemNameservers(); err == nil {
+		for _, r := range resolvers {
+			if Is6(r) {
+				var zone string
+				if r.IsLinkLocalUnicast() && dev != nil {
+					zone = dev.Name
+				}
+				return &net.UDPAddr{IP: net.ParseIP(StripZone(r).String()), Port: 53, Zone: zone}
+			}
+		}
+	}
+	return GoogleDNS6
+}
+
+// GetIPv4ResolverFromNetworkNamespace returns first suitable IPv4 address from /etc/netns/ns/resolv.conf or Google IPv4 DNS as fallback
+func GetIPv4ResolverFromNetworkNamespace(ns string) *net.UDPAddr {
+	if resolvers, err := GetNameserversForNetworkNamespace(ns); err == nil {
+		for _, r := range resolvers {
+			if r.Is4() {
+				return &net.UDPAddr{IP: net.ParseIP(r.String()), Port: 53}
+			}
+		}
+	}
+	return GoogleDNS
+}
+
+// GetIPv6ResolverFromNetworkNamespace returns first suitable IPv6 address from /etc/netns/ns/resolv.conf or Google IPv6 DNS as fallback
+func GetIPv6ResolverFromNetworkNamespace(dev *net.Interface, ns string) *net.UDPAddr {
+	if resolvers, err := GetNameserversForNetworkNamespace(ns); err == nil {
+		for _, r := range resolvers {
+			if Is6(r) {
+				var zone string
+				if r.IsLinkLocalUnicast() && dev != nil {
+					zone = dev.Name
+				}
+				return &net.UDPAddr{IP: net.ParseIP(StripZone(r).String()), Port: 53, Zone: zone}
+			}
+		}
+	}
+	return GoogleDNS6
+}
+
 // GetPromiscuous returns promiscuous mode bit value for given interface or -1 on error
 func GetPromiscuous(iface string) int {
-	flagsData, err := os.ReadFile(fmt.Sprintf("/sys/class/net/%s/flags", iface))
+	flagsData, err := os.ReadFile(filepath.Clean(fmt.Sprintf("/sys/class/net/%s/flags", iface)))
 	if err != nil {
 		return -1
 	}
@@ -606,22 +684,6 @@ func StripZone(ip netip.Addr) netip.Addr {
 		return ip
 	}
 	return netip.AddrFrom16(ip.As16())
-}
-
-// GetIPv6Resolver returns first suitable IPv6 address from resolv.conf or Google IPv6 DNS as fallback
-func GetIPv6Resolver(dev *net.Interface) *net.UDPAddr {
-	if resolvers, err := GetSystemNameservers(); err == nil {
-		for _, r := range resolvers {
-			if Is6(r) {
-				var zone string
-				if r.IsLinkLocalUnicast() && dev != nil {
-					zone = dev.Name
-				}
-				return &net.UDPAddr{IP: net.ParseIP(StripZone(r).String()), Port: 53, Zone: zone}
-			}
-		}
-	}
-	return &net.UDPAddr{IP: net.ParseIP("2001:4860:4860::8888"), Port: 53}
 }
 
 // BroadcastFromPrefix calculates broadcast address from IPv4 prefix.Addr
