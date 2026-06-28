@@ -555,7 +555,7 @@ func GetSystemNameservers() ([]netip.Addr, error) {
 }
 
 func GetNameserversForNetworkNamespace(ns string) ([]netip.Addr, error) {
-	if ns == "" {
+	if ns == "" || ns == "/proc/1/ns/net" {
 		return GetSystemNameservers()
 	}
 	fBytes, err := os.ReadFile(filepath.Clean(fmt.Sprintf("/etc/netns/%s/resolv.conf", filepath.Base(ns))))
